@@ -1,0 +1,1601 @@
+<title>SiteEye</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
+<style>
+/* Saha aracı: üstte marka şeridi + sekmeler, altında tek sütun iş alanı. Renkler Mikrolink kimliğinden: bordo, krem, antrasit */
+:root{
+  --bg:#f7f2e8; --surface:#fffdf8; --surface-2:#efe7d8; --fg:#231f20; --muted:#6b5f5c; --line:#e1d6c3;
+  --accent:#961937; --accent-ink:#7d1530; --on-accent:#fffae4; --stripe:#231f20;
+  --hdr-bg:#961937; --hdr-fg:#fffae4; --hdr-muted:rgba(255,250,228,.72); --hdr-line:rgba(255,250,228,.28); --bar:#231f20;
+  --ok:#2f7a4c; --ok-bg:#e2f0e5; --warn:#94600f; --warn-bg:#f8ecd2; --crit:#c2410c; --crit-bg:#fbe5d8; --info:#2a5f93; --info-bg:#e1ebf5;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#151112; --surface:#1f191a; --surface-2:#2a2224; --fg:#f3ece0; --muted:#a89a95; --line:#3a2f31;
+  --accent:#e0577a; --accent-ink:#f08aa3; --on-accent:#1a0a0f; --stripe:#f3ece0;
+  --hdr-bg:#6e1229; --hdr-fg:#fffae4; --hdr-muted:rgba(255,250,228,.7); --hdr-line:rgba(255,250,228,.22); --bar:#0b0909;
+  --ok:#62c48d; --ok-bg:#16301f; --warn:#e3ad52; --warn-bg:#352812; --crit:#ff8a5c; --crit-bg:#3a2014; --info:#86b6ea; --info-bg:#15263a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#151112; --surface:#1f191a; --surface-2:#2a2224; --fg:#f3ece0; --muted:#a89a95; --line:#3a2f31;
+  --accent:#e0577a; --accent-ink:#f08aa3; --on-accent:#1a0a0f; --stripe:#f3ece0;
+  --hdr-bg:#6e1229; --hdr-fg:#fffae4; --hdr-muted:rgba(255,250,228,.7); --hdr-line:rgba(255,250,228,.22); --bar:#0b0909;
+  --ok:#62c48d; --ok-bg:#16301f; --warn:#e3ad52; --warn-bg:#352812; --crit:#ff8a5c; --crit-bg:#3a2014; --info:#86b6ea; --info-bg:#15263a; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0}
+h2{font-size:1.35rem} h3{font-size:1.05rem}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{background:var(--hdr-bg);color:var(--hdr-fg);position:sticky;top:env(safe-area-inset-top,0px);z-index:20}
+.top .wrap{display:flex;align-items:center;gap:12px;padding-block:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{flex:none}
+.brand h1{font-size:1.3rem;line-height:1.1}
+.brand small{display:block;font-size:.8rem;color:var(--hdr-muted);font-family:var(--f-body)}
+.top .btn{background:transparent;border-color:var(--hdr-line);color:var(--hdr-fg)}
+.top .btn:hover{border-color:var(--hdr-fg)}
+.top .pill{background:var(--hdr-line);color:var(--hdr-fg)}
+.top :focus-visible{outline-color:var(--hdr-fg)}
+.status{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tape{height:5px;background:var(--bar)}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding-block:0}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 12px;font-weight:600;color:var(--hdr-muted);white-space:nowrap;cursor:pointer}
+nav.tabs button[aria-selected="true"]{color:var(--hdr-fg);border-bottom-color:var(--hdr-fg)}
+nav.tabs button:hover{color:var(--hdr-fg)}
+
+main{padding-block:18px 60px}
+section.view{display:flex;flex-direction:column;gap:18px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar .grow{flex:1}
+
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:600;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.crit{background:var(--crit-bg);color:var(--crit)} .pill.info{background:var(--info-bg);color:var(--info)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:8px 14px;font-weight:600;cursor:pointer;min-height:40px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{color:var(--crit)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{min-height:32px;padding:4px 10px;font-size:.85rem}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.panel > header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:18px}
+
+/* KPI strip: tek kutu, bölmeli */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.kpi{padding:14px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 -1px -1px 0}
+.kpi .v{font-family:var(--f-display);font-size:2rem;font-weight:700;line-height:1}
+.kpi .l{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:6px}
+.kpi .d{font-size:.8rem;margin-top:2px}
+.kpi.alert .v{color:var(--crit)}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;background:var(--surface-2);white-space:nowrap;position:sticky;top:0}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tr.click{cursor:pointer} tr.click:hover td{background:var(--surface-2)}
+tfoot td{font-weight:700;background:var(--surface-2)}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:46ch}
+.zero{color:var(--line)}
+
+/* forms */
+form.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld.full{grid-column:1/-1}
+.fld label{font-size:.8rem;font-weight:700;letter-spacing:.03em;color:var(--muted);text-transform:uppercase}
+.fld label .req{color:var(--accent-ink)}
+.fld input,.fld select,.fld textarea{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;min-height:42px;width:100%}
+.fld textarea{min-height:84px;resize:vertical}
+.fld .hint{font-size:.8rem;color:var(--muted)}
+.actions{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.drop{border:1.5px dashed var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.drop.over{border-color:var(--accent)}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px}
+.thumb{position:relative;width:76px;height:76px;border-radius:4px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.thumb button{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:var(--fg);color:var(--bg);font-size:13px;line-height:1;cursor:pointer}
+.risk{display:inline-flex;align-items:center;gap:8px;font-weight:700}
+.risk .sc{font-family:var(--f-mono);min-width:2.2em;text-align:center;border-radius:4px;padding:2px 6px}
+.r-low .sc{background:var(--ok-bg);color:var(--ok)} .r-mid .sc{background:var(--warn-bg);color:var(--warn)}
+.r-high .sc{background:var(--crit-bg);color:var(--crit)} .r-vhigh .sc{background:var(--crit);color:var(--surface)}
+
+/* chart */
+.chart svg{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font:11px var(--f-mono)}
+.hbar{display:grid;grid-template-columns:minmax(90px,170px) 1fr auto;gap:8px 10px;align-items:center;font-size:.88rem}
+.hbar .track{height:10px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.hbar .fill{height:100%;background:var(--accent)}
+.hbar .meta{font-family:var(--f-mono);font-size:.8rem;white-space:nowrap;text-align:right}
+
+/* banners, toast, sheet */
+.banner{border-radius:var(--r);padding:12px 14px;background:var(--info-bg);color:var(--fg);border:1px solid var(--line);font-size:.92rem}
+.banner.warn{background:var(--warn-bg)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:var(--r);font-weight:600;z-index:60;max-width:calc(100% - 32px)}
+.overlay{position:fixed;inset:0;background:rgba(10,14,16,.55);z-index:40;display:flex;justify-content:flex-end}
+.sheet{background:var(--surface);width:min(720px,100%);height:100%;overflow-y:auto;padding:18px 16px calc(40px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;padding-top:calc(18px + env(safe-area-inset-top,0px))}
+.sheet > header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.lightbox{position:fixed;inset:0;background:rgba(5,8,10,.9);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
+.lightbox img{max-height:75vh;max-width:100%;border-radius:4px}
+.lightbox .cap{color:#e9eef0;max-width:70ch;text-align:center;font-size:.9rem}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.gallery figure{margin:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.gallery img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:zoom-in;background:var(--surface-2);max-width:100%}
+.gallery figcaption{font-size:.75rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folder{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:.85rem;color:var(--muted);flex-wrap:wrap}
+.empty{padding:28px 16px;text-align:center;color:var(--muted);border:1.5px dashed var(--line);border-radius:var(--r)}
+.progress{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.progress > div{height:100%;background:var(--accent);width:0}
+.auth-card{max-width:460px;margin:28px auto 0;width:100%}
+form.f.one{grid-template-columns:1fr}
+.err{color:var(--crit);font-size:.88rem}
+.userbox{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+.userbox .who{display:flex;align-items:center;gap:6px;font-size:.9rem}
+.status + .userbox{margin-left:0}
+.steps{margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:.92rem}
+.qrrow{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.qr{background:#ffffff;padding:10px;border-radius:6px;border:1px solid var(--line);line-height:0;flex:none}
+.qr img,.qr canvas{display:block;max-width:100%}
+.secret{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;word-break:break-all;font-size:.9rem;margin-bottom:6px}
+.cred{white-space:pre;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;margin:8px 0;overflow-x:auto}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.kv > div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kv span{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+.kv b{overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 6px 4px 12px;font-weight:600;font-size:.9rem}
+.chip button{border:0;background:var(--surface-2);color:var(--fg);border-radius:999px;min-width:24px;height:24px;cursor:pointer;font-size:.8rem;padding:0 6px}
+.chip button.sure{background:var(--crit);color:var(--surface)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:7px 14px;font-weight:600;color:var(--muted);cursor:pointer;min-height:36px}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.view-sub{display:flex;flex-direction:column;gap:18px}
+.range{display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 14px;font-weight:600;cursor:pointer;color:var(--fg);min-height:36px}
+.presets button:hover{border-color:var(--accent)}
+.presets button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.dates label{font-size:.85rem}
+.dates input{min-height:36px}
+.check{display:flex;gap:8px;align-items:center;font-weight:600;font-size:.92rem;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+.checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 12px;margin-top:8px}
+.sortbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+.sortbtn .arr{opacity:.45;font-size:.85em}
+th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:var(--accent)}
+.seg button[role="radio"]{min-width:110px}
+@media (min-width:900px){#r-kz-kpis{grid-template-columns:repeat(6,1fr)}}
+.tablewrap.lim{max-height:min(780px,75vh);overflow:auto}
+.tablewrap.lim thead th{position:sticky;top:0;z-index:1}
+.tablewrap.lim tfoot td{position:sticky;bottom:0}
+.lim-box{max-height:min(780px,75vh);overflow:auto;padding-right:4px}
+.hdr-r{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crumbs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.92rem}
+.folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.fcard{display:flex;flex-direction:column;gap:8px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;cursor:pointer;color:var(--fg);min-width:0}
+.fcard:hover{border-color:var(--accent)}
+.fhead{display:flex;align-items:center;justify-content:space-between}
+.fcount{font-family:var(--f-mono);font-size:.8rem;background:var(--surface-2);border-radius:999px;padding:2px 8px}
+.fname{display:flex;flex-direction:column;gap:1px;min-width:0}
+.fname > *{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fname span{font-size:.88rem}
+.fthumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.fthumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:3px;background:var(--surface-2)}
+.ftags{font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kpi .v{white-space:nowrap}
+#r-cz-kpis .v,#cz-kpis .v{font-size:1.55rem}
+@media (min-width:900px){#r-cz-kpis{grid-template-columns:repeat(5,1fr)}}
+@media (prefers-reduced-motion:no-preference){.btn,.hbar .fill{transition:all .15s}}
+@media (max-width:560px){.kpi .v{font-size:1.6rem} th,td{padding:7px 8px}}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="34" height="26" viewBox="0 0 34 26" aria-hidden="true"><path d="M1 13 L11 3 H23 L33 13 L23 23 H11 Z" fill="none" stroke="var(--hdr-fg)" stroke-width="2.6"/><circle cx="17" cy="13" r="5.2" fill="var(--hdr-fg)"/></svg>
+      <div><h1>SiteEye</h1></div>
+    </div>
+    <div class="userbox" id="hdr-user" hidden></div>
+  </div>
+  <div class="wrap"><nav class="tabs" id="tabs" role="tablist" hidden></nav></div>
+  <div class="tape"></div>
+</header>
+
+<main class="wrap">
+  <div id="banner"></div>
+
+  <!-- PANEL -->
+  <section class="view" id="v-auth"></section>
+
+  <!-- KULLANICILAR -->
+  <section class="view" id="v-kullanici" hidden>
+    <div class="panel">
+      <header><h2>Kullanıcı ekle</h2><span class="muted" style="font-size:.85rem">Kullanıcı ilk girişte şifresini değiştirir ve kendi authenticator'ını tanımlar</span></header>
+      <form class="f" id="f-user" novalidate>
+        <div class="fld"><label for="u-ad">Ad soyad</label><input id="u-ad" autocomplete="off"></div>
+        <div class="fld"><label for="u-mail">E-posta</label><input id="u-mail" type="email" autocomplete="off"></div>
+        <div class="fld"><label for="u-rol">Rol</label><select id="u-rol"><option value="kullanici">Kullanıcı</option><option value="admin">Admin</option></select></div>
+        <div class="fld"><label for="u-pw">Geçici şifre</label><div class="bar" style="flex-wrap:nowrap"><input id="u-pw" class="mono" autocomplete="off" readonly style="flex:1;min-width:0"><button class="btn sm" type="button" id="u-gen">Oluştur</button></div></div>
+        <div class="actions"><button class="btn primary" type="submit">Kullanıcıyı ekle</button><span class="err" id="u-msg"></span></div>
+      </form>
+      <div id="u-cred" style="margin-top:12px"></div>
+    </div>
+    <div class="panel" id="u-pending" hidden></div>
+    <div class="bar"><h2 class="grow">Kullanıcılar</h2><span class="muted" id="u-count"></span></div>
+    <div class="tablewrap"><table id="u-table"></table></div>
+  </section>
+
+  <!-- HESABIM -->
+  <section class="view" id="v-hesap" hidden>
+    <div class="panel"><header><h2>Hesabım</h2></header><div class="kv" id="h-info"></div></div>
+    <div class="grid2">
+      <div class="panel"><header><h3>Şifre değiştir</h3></header>
+        <form class="f one" id="f-pw" novalidate>
+          <div class="fld"><label for="h-old">Mevcut şifre</label><input id="h-old" type="password" autocomplete="current-password"></div>
+          <div class="fld"><label for="h-new">Yeni şifre</label><input id="h-new" type="password" autocomplete="new-password"><span class="hint">En az 10 karakter; büyük harf, küçük harf ve rakam içermeli.</span></div>
+          <div class="fld"><label for="h-new2">Yeni şifre tekrar</label><input id="h-new2" type="password" autocomplete="new-password"></div>
+          <div class="fld"><label for="h-code">Authenticator kodu</label><input id="h-code" class="mono" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
+          <div class="actions"><button class="btn primary" type="submit">Şifreyi değiştir</button><span class="err" id="h-msg"></span></div>
+        </form></div>
+      <div class="panel"><header><h3>Authenticator'ı yeniden tanımla</h3></header>
+        <p class="muted" style="margin:0 0 12px;font-size:.9rem">Telefon değiştirdiyseniz kullanın. Mevcut kodla doğruladıktan sonra yeni QR kod gösterilir.</p>
+        <form class="f one" id="f-totp" novalidate>
+          <div class="fld"><label for="t-pw">Şifre</label><input id="t-pw" type="password" autocomplete="current-password"></div>
+          <div class="fld"><label for="t-code">Mevcut authenticator kodu</label><input id="t-code" class="mono" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
+          <div class="actions"><button class="btn" type="submit">Yeni authenticator tanımla</button><span class="err" id="t-msg"></span></div>
+        </form>
+        <p class="muted" style="margin:12px 0 0;font-size:.85rem">Eski telefonunuz elinizde değilse yöneticinizden şifre sıfırlaması isteyin; yeniden girişte yeni authenticator tanımlarsınız.</p></div>
+    </div>
+  </section>
+
+  <!-- AKTİVİTE -->
+  <section class="view" id="v-aktivite" hidden>
+    <div class="panel">
+      <header><h2>Aktivite girişi</h2><span class="muted" style="font-size:.85rem">Denetim, onay, eğitim, toplantı, raporlama</span></header>
+      <form class="f" id="f-akt" novalidate></form>
+    </div>
+    <div class="panel"><header><h3 id="a-list-title">Bu hafta girdiklerim</h3></header><div id="a-list"></div></div>
+  </section>
+
+  <!-- DÖF -->
+  <section class="view" id="v-dof" hidden>
+    <div class="bar">
+      <h2 class="grow">DÖF / uygunsuzluk takibi</h2>
+      <button class="btn primary" id="dof-new">+ Yeni DÖF</button>
+    </div>
+    <div class="bar">
+      <select id="dof-durum" class="btn sm" aria-label="Durum"><option value="acik">Açık olanlar</option><option value="">Tüm durumlar</option><option>Tamamlandı</option><option>İptal</option></select>
+      <select id="dof-lok" class="btn sm" aria-label="Lokasyon"></select>
+      <select id="dof-alt" class="btn sm" aria-label="Alt yüklenici"></select>
+      <input id="dof-q" class="btn sm grow" placeholder="Gözlem, form no, sorumlu ara" style="font-weight:400">
+    </div>
+    <div class="tablewrap lim"><table id="dof-table"></table></div>
+  </section>
+
+  <!-- KAZA -->
+  <section class="view" id="v-kaza" hidden>
+    <div class="bar"><h2 class="grow">Kaza Rapor</h2><button class="btn primary" id="kaza-new" data-tip="Kaza">+ Kaza bildir</button><button class="btn" id="rk-new" data-tip="Ramak Kala">+ Ramak kala bildir</button></div>
+    <div class="kpis" id="kaza-kpis"></div>
+    <div class="bar"><div class="seg" role="tablist" aria-label="Olay tipi"><button type="button" data-kfilt="">Tümü</button><button type="button" data-kfilt="Kaza">Kaza</button><button type="button" data-kfilt="Ramak Kala">Ramak kala</button></div></div>
+    <div class="tablewrap lim"><table id="kaza-table"></table></div>
+  </section>
+
+  <!-- CEZA & ÖDÜL -->
+  <section class="view" id="v-ceza" hidden>
+    <div class="bar"><h2 class="grow">Ceza</h2><button class="btn primary" data-czyeni="Ceza">+ Ceza</button></div>
+    <div class="kpis" id="cz-kpis"></div>
+    <div class="tablewrap lim"><table id="cz-table"></table></div>
+  </section>
+
+  <!-- FOTOĞRAFLAR -->
+  <section class="view" id="v-foto" hidden>
+    <div class="bar"><h2 class="grow">Fotoğraf arşivi</h2><button class="btn" id="ph-zip">Tümünü ZIP indir</button></div>
+    <div class="panel range"><div class="bar dates"><label for="ph-from" class="muted">Başlangıç</label><input type="date" id="ph-from" class="btn sm"><label for="ph-to" class="muted">Bitiş</label><input type="date" id="ph-to" class="btn sm"><input id="ph-q" class="btn sm grow" placeholder="Klasör ara: tarih, kişi, lokasyon, alt yüklenici" style="font-weight:400;min-width:200px"></div></div>
+    <div class="crumbs" id="ph-path"></div>
+    <div id="ph-body"></div>
+  </section>
+
+  <!-- RAPOR -->
+  <section class="view" id="v-rapor" hidden>
+    <div class="panel range">
+      <div class="bar"><h2 class="grow">Rapor</h2><button class="btn primary" id="r-dl">Excel indir (.xlsx)</button></div>
+      <div class="bar dates"><label for="rg-from" class="muted">Başlangıç</label><input type="date" id="rg-from" class="btn sm"><label for="rg-to" class="muted">Bitiş</label><input type="date" id="rg-to" class="btn sm"><span class="muted" id="rg-info"></span></div>
+      <p class="muted" style="margin:0;font-size:.85rem">Excel dosyası bu sayfada görünen her şeyi içerir: seçili tarih aralığı ve filtrelerle aktivite kayıtları, uzman performansı, lokasyon saha denetimleri, İSG performans, kaza ve ramak kala raporu, ceza raporu, ayrıca aynı aralıktaki DÖF ve kaza kayıtları.</p>
+      <p class="muted" id="r-msg" style="margin:0;font-size:.88rem"></p>
+    </div>
+    <div class="panel">
+      <div class="bar" style="margin-bottom:12px"><h3 class="grow">Aktivite kayıtları</h3><span class="muted" id="k-count"></span><button class="btn sm" data-xl="kayit">Excel</button></div>
+      <div class="bar" id="k-filters" style="margin-bottom:8px"></div>
+      <div class="bar" style="margin-bottom:12px"><input id="k-q" class="btn sm grow" placeholder="Kayıtlarda ara" style="font-weight:400"></div>
+      <div class="tablewrap lim"><table id="k-table"></table></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><header><h3>Uzman performansı</h3><span class="hdr-r"><span class="muted" id="r-uzman-sub" style="font-size:.8rem"></span><button class="btn sm" data-xl="uzman">Excel</button></span></header><div class="tablewrap lim"><table id="r-uzman"></table></div></div>
+      <div class="panel"><header><h3>Lokasyon saha denetimleri</h3><span class="hdr-r"><span class="muted" style="font-size:.8rem">aralıktaki sayı · en uzun süredir gidilmeyen üstte</span><button class="btn sm" data-xl="lok">Excel</button></span></header><div class="lim-box"><div class="hbar" id="r-lok"></div></div></div>
+    </div>
+    <div class="panel"><header><h3 id="r-prev-title">İSG performans</h3><button class="btn sm" data-xl="isg">Excel</button></header><div class="tablewrap lim"><table id="r-prev"></table></div></div>
+    <div class="panel"><header><h3 id="r-num-title">Sayısal alan özetleri</h3><span class="hdr-r"><span class="muted" style="font-size:.8rem">formdaki sayı alanlarının toplamı · gruplama alanı Ayarlar'dan seçilir</span></span></header>
+      <div class="grid2" id="r-num"></div>
+    </div>
+    <div class="panel"><header><h3 id="r-kz-title">Kaza ve ramak kala raporu</h3><span class="hdr-r"><span class="muted" style="font-size:.8rem">tarih aralığına ve lokasyon / alt yüklenici filtresine göre</span><button class="btn sm" data-xl="kzstats">Göstergeler Excel</button></span></header>
+      <div class="kpis" id="r-kz-kpis"></div>
+      <div class="grid2" style="margin-top:16px" id="r-kz-tables"></div>
+    </div>
+    <div class="panel"><header><h3 id="r-cz-title">Ceza raporu</h3><span class="hdr-r"><span class="muted" style="font-size:.8rem">tarih aralığına ve lokasyon / alt yüklenici filtresine göre</span><button class="btn sm" data-xl="czdetay">Detay Excel</button></span></header>
+      <div class="kpis" id="r-cz-kpis"></div>
+      <div class="grid2" style="margin-top:16px" id="r-cz-tables"></div>
+    </div>
+  </section>
+
+  <!-- AYARLAR -->
+  <section class="view" id="v-ayar" hidden>
+    <div class="panel">
+      <header><h2>Aktivite formu</h2><button class="btn primary sm" id="fa-add" type="button">+ Alan ekle</button></header>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">Tarih alanı sabit ve her zaman ilk sırada. Diğer alanların adını, türünü, seçeneklerini, sırasını, zorunluluğunu ve hangi aktivitelerde görüneceğini buradan belirleyin. Aktivite sekmesindeki form bu tanıma göre oluşur.</p>
+      <div class="tablewrap"><table id="fa-table"></table></div>
+    </div>
+    <div class="panel">
+      <header><h2>DÖF firmaları</h2><span class="muted" style="font-size:.85rem">DÖF formundaki "İletilen firma" seçenekleri · her satıra bir firma</span></header>
+      <form class="f one" id="f-ayar" novalidate>
+        <div class="fld"><label for="s-firma">Firmalar</label><textarea id="s-firma" rows="6"></textarea></div>
+        <div class="actions"><button class="btn primary" type="submit">Kaydet</button><span class="muted" id="s-msg"></span></div>
+      </form>
+    </div>
+    <div class="panel">
+      <header><h2>Excel'den içe aktar</h2></header>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">FAALİYET_RAPORU .xlsm dosyasını seçin. AKTİVİTELER sayfasındaki seçili yılın kayıtları (yalnızca aktivite listesindeki türlere giren satırlar) ve DÖF TÜM ZAMANLAR sayfasındaki o yılın + hâlâ açık olan DÖF'ler aktarılır. Aynı dosyayı tekrar yüklemek kopya oluşturmaz; uygulamada fotoğraf eklenmiş kayıtların üzerine yazılmaz.</p>
+      <div class="bar"><input type="file" id="imp-file" accept=".xlsx,.xlsm"><button class="btn primary" id="imp-go" disabled>İçe aktar</button></div>
+      <p class="muted" id="imp-msg" style="font-size:.88rem"></p>
+      <div class="progress" id="imp-prog" hidden><div></div></div>
+    </div>
+  </section>
+</main>
+
+<div id="layer"></div>
+
+<script>
+(() => {
+'use strict';
+/* ---------- sabit listeler (rapordaki KODLAR sayfasından) ---------- */
+const DEF = {
+  uzmanlar:['FATMA NUR İŞLER','TEKİN ERTAŞ','NİLAY BARIŞ ERGÖKŞEN','UTKU BAYRAKTAR','OSGB UZMANI'],
+  lokasyonlar:['Adana','Ankara','Antalya','Beşiktaş Stad','Çamlıca','Diyarbakır','Erzurum','Esenyurt','Güneşli','İzmir','Kıbrıs','Maslak','Samsun','Tuzla','Diğer'],
+  altyukleniciler:['Mikrolink','Telcoset','220 Bilişim','Aperta','Huawei','Nokia'],
+  firmalar:['Vodafone','Mikrolink','ISS','Telcoset','CRC Elektronik','Akım Elektrik','Altay Klima'],
+  aktiviteler:['SAHA DENETİMİ','ARAÇ DENETİMİ','KAMERA DENETİMİ','SÜRÜŞ DENETİMİ','KKD DENETİMİ','PERSONEL ONAYI','ÇALIŞMA ONAYI','ARAÇ ONAYI','FİRMA ONAYI','RAPORLAMA','TOPLANTI','EĞİTİM']
+};
+/* Eski lokasyon adlarını (ANKARA MTX, ESENYURT LTC, SAMSUN OFİS…) yeni listeye eşler; eşleşmeyen "Diğer" olur */
+function normLok(v){ const t = tru(v); if (!t) return ''; const L = opt('lokasyon').length ? opt('lokasyon') : DEF.lokasyonlar; const hit = L.find(l => l !== 'Diğer' && t.startsWith(tru(l))); return hit || (L.includes('Diğer') ? 'Diğer' : String(v).trim()); }
+const plakaNorm = v => tru(v).replace(/\s+/g, '');
+const withLok = r => ({ ...r, lokasyon: normLok(r.lokasyon), ...(r.plaka ? { plaka: plakaNorm(r.plaka) } : {}) });
+/* Alt yüklenici: kayıtta yoksa eski Excel satırlarındaki Personel sütunundan (ör. "220 BİLİŞİM") çıkarılır */
+const altList = () => uniq([...opt('altYuklenici'), ...DEF.altyukleniciler]);
+function altOf(r){ if (r.altYuklenici) return r.altYuklenici; const t = tru(r.personel); if (!t) return ''; return altList().find(x => t === tru(x) || t.startsWith(tru(x) + ' ')) || ''; }
+const withAlt = r => ({ ...r, altYuklenici: altOf(r) });
+const sonuclar = () => opt('sonuc');
+const sonucPill = v => v ? `<span class="pill ${v === 'Tebrik' ? 'ok' : v === 'Uyarı' ? 'warn' : 'crit'}">${esc(v)}</span>` : '';
+const EGITIM_KONU = ['Temel İSG','Elektrik İşlerinde Güvenlik','Yüksekte Çalışma','Güvenli Sürüş','İlk Yardım','8 Mutlak Kural','Toolbox','Kaza Sonrası','Yasal İSG','Acil Durum Tatbikatı','Diğer'];
+/* Excel'deki eski aktivite adlarını 12 başlığa eşler; eşleşmeyen eski türler olduğu gibi kalır */
+const AKT_MAP = { 'ATS RAPORLAMA':'RAPORLAMA', 'BİLGİLENDİRME':'RAPORLAMA', 'OFİS ÇALIŞMASI':'RAPORLAMA', 'İŞE GİRİŞ ONAYI':'PERSONEL ONAYI' };
+/* 12 başlık dışında kalan eski türler (refakat, firma/çalışma/online denetim vb.) null döner ve uygulamadan çıkarılır */
+function normAkt(r){
+  const t = r.aktivite || '';
+  let out = r;
+  if (t !== 'EĞİTİM' && /EĞİTİM|TATBİKAT/.test(t)) out = { ...r, aktivite:'EĞİTİM', egitimKonusu: r.egitimKonusu || t };
+  else if (Object.hasOwn(AKT_MAP, t)) out = { ...r, aktivite:AKT_MAP[t] };
+  return (r.kaynak === 'uygulama' || S.cfg.aktiviteler.includes(out.aktivite)) ? out : null;
+}
+/* ---------- aktivite formu alanları (admin tanımlar; tarih sabit) ---------- */
+const TIP = { liste:'Liste', metin:'Kısa metin', sayi:'Sayı', uzun:'Uzun metin', foto:'Fotoğraf' };
+const DEFAULT_FIELDS = [
+  { key:'raporlayan', ad:'Raporlayan', tip:'liste', secenekler:DEF.uzmanlar, zorunlu:true, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'aktivite', ad:'Aktivite', tip:'liste', secenekler:DEF.aktiviteler, zorunlu:true, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'egitimKonusu', ad:'Eğitim konusu', tip:'liste', secenekler:EGITIM_KONU, zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'aktivite', degerler:['EĞİTİM'] }, yer:'' },
+  { key:'katilimci', ad:'Katılımcı sayısı', tip:'sayi', secenekler:[], zorunlu:false, aktif:true, sistem:false, kosul:{ alan:'aktivite', degerler:['EĞİTİM'] }, rapor:'egitimKonusu', yer:'Eğitime katılan kişi sayısı' },
+  { key:'lokasyon', ad:'Bölge / Lokasyon', tip:'liste', secenekler:DEF.lokasyonlar, zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'altYuklenici', ad:'Alt yüklenici', tip:'liste', secenekler:DEF.altyukleniciler, zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'personel', ad:'Personel', tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'Ad Soyad' },
+  { key:'plaka', ad:'Plaka', tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'34ABC123' },
+  { key:'sonuc', ad:'Sonuç', tip:'liste', secenekler:['Tebrik','Uyarı','İhlal'], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'adet', ad:'Onaylanan adet', tip:'sayi', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'aktivite', degerler:['PERSONEL ONAYI','ÇALIŞMA ONAYI','ARAÇ ONAYI','FİRMA ONAYI'] }, yer:'Onaylanan kişi/çalışma sayısı', rapor:'aktivite' },
+  { key:'aciklama', ad:'Açıklama', tip:'uzun', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'Ankara lokasyon denetimi yapılmıştır.' },
+  { key:'foto', ad:'Denetim fotoğrafları', tip:'foto', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' }
+];
+const KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+const validField = f => f && typeof f === 'object' && typeof f.key === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(f.key) && Object.hasOwn(TIP, f.tip) && typeof f.ad === 'string';
+const F = () => { const a = Array.isArray(S.fields) ? S.fields.filter(validField).map(f => ({ ...f, secenekler: Array.isArray(f.secenekler) ? f.secenekler.filter(x => typeof x === 'string') : [], kosul: f.kosul && Array.isArray(f.kosul.degerler) ? { alan: KEY_RE.test(f.kosul.alan || '') ? f.kosul.alan : 'aktivite', degerler:f.kosul.degerler.filter(x => typeof x === 'string') } : null, rapor: KEY_RE.test(f.rapor || '') ? f.rapor : '', yer: typeof f.yer === 'string' ? f.yer : '' })) : []; return a.length ? a : DEFAULT_FIELDS; };
+const fld = k => F().find(f => f.key === k);
+const opt = k => (fld(k)?.secenekler || []);
+const activeFields = () => F().filter(f => f.aktif !== false);
+function applyFields(){ Object.assign(S.cfg, { uzmanlar:opt('raporlayan'), aktiviteler:opt('aktivite'), lokasyonlar:opt('lokasyon'), altyukleniciler:opt('altYuklenici') }); S._ac = S._dc = S._kc = S._zc = null; }
+/* Kaza kayıtları: olay tipi Kaza ya da Ramak Kala; eski "RamakKala/Minor/Major/Fatality" sınıfları yeni adlara eşlenir */
+const SINIF_MAP = { Minor:'Minör', Major:'Majör', HiPo:'HiPo', Fatality:'Ölümlü' };
+function kazaNorm(k){ const tip = k.olayTipi || (k.sinif === 'RamakKala' ? 'Ramak Kala' : 'Kaza'); const sinif = tip === 'Kaza' ? ((Object.hasOwn(SINIF_MAP, k.sinif) ? SINIF_MAP[k.sinif] : k.sinif) || '') : ''; return { ...k, olayTipi:tip, sinif }; }
+const isKaza = k => k.olayTipi === 'Kaza', isRK = k => k.olayTipi === 'Ramak Kala';
+const yaralanmali = k => isKaza(k) && (/Yaralanma|İşgöremezlik|Ölüm/i.test(k.sonuc || '') || (k.uzuv && !/^N\/?A$/i.test(k.uzuv)) || (Number(k.kayipGun) || 0) > 0 || k.sinif === 'Ölümlü');
+const olumlu = k => isKaza(k) && (k.sinif === 'Ölümlü' || /^Ölüm$/i.test(k.sonuc || ''));
+const UYG = ['Güvensiz Durum','Periyodik Kontroller','Yangın Güvenliği','Fiziksel Riskler','Elektrik Güvenliği','İşaretleme ve Uyarı Sistemleri','Acil Durum Yönetimi','İlk Yardım','İş Ekipmanları','Kişisel Koruyucu Donanım','Yüksekte Çalışma','Çevre / Atık','Diğer'];
+const KZ = {
+  sinif:['Minör','Majör','HiPo','Ölümlü'],
+  tur:['Elektrik','Kaldırma / Taşıma','İki Nesne Arasında Sıkışma','Kayma, Takılma & Düşme','Yüksekten Düşme','Merdivenden / Basamaktan Düşme','Düşen Malzemeler','El Aletleri Kullanımı','Makina & Ekipman Kullanımı','Malzeme Transportu','Trafik Kazası','Sabit bir Nesneye Çarpma','Göze Yabancı Nesne Kaçması','Yangın / Patlama','Yanma-Yanık','Duman & Gaz','Kimyasal Maddeler','Zehirlenme','Doğal Afet','Diğer'],
+  sonuc:['NA','Hafif Yaralanma','Geçici İşgöremezlik','Kalıcı İşgöremezlik','Ölüm','Maddi Hasarlı Kaza-olay','Maddi Hasarlı Trafik Kazası','Çevresel Zarar','Diğer'],
+  uzuv:['N/A','Baş','Göz','Boyun','Gövde','Bel','Kol','El ve Parmaklar','Bilek','Bacak','Ayak ve Parmaklar','Birden fazla'],
+  saat:['00:00 - 02:00','02:00 - 04:00','04:00 - 06:00','06:00 - 08:00','08:00 - 10:00','10:00 - 12:00','12:00 - 14:00','14:00 - 16:00','16:00 - 18:00','18:00 - 20:00','20:00 - 22:00','22:00 - 24:00','Bilinmiyor'],
+  bolge:['R1','R2','R3 EGE','R3 AKDENİZ','R4','R5']
+};
+const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const GROUPS = [
+  ['Denetim', t => /DENETİM/.test(t)],
+  ['Onay', t => /ONAYI/.test(t)],
+  ['Eğitim', t => t === 'EĞİTİM'],
+  ['Raporlama', t => t === 'RAPORLAMA'],
+  ['Toplantı', t => t === 'TOPLANTI']
+];
+const groupOf = t => (GROUPS.find(g => g[1](t || '')) || ['Diğer'])[0];
+
+/* ---------- yardımcılar ---------- */
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tru = v => String(v ?? '').trim().toLocaleUpperCase('tr-TR');
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseD = s => { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(s)) return null; const [y,m,d] = s.slice(0,10).split('-').map(Number); return new Date(y, m-1, d, 12); };
+const trD = s => { const d = parseD(s); return d ? `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}` : ''; };
+function isoWeek(d){ const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); const y = t.getUTCFullYear(); return { y, w: Math.ceil(((t - Date.UTC(y,0,1)) / 864e5 + 1) / 7) }; }
+function weekStart(y, w){ const j4 = new Date(y, 0, 4, 12); const day = j4.getDay() || 7; const mon = new Date(j4); mon.setDate(j4.getDate() - day + 1 + (w-1)*7); return mon; }
+function weekLabel(y, w){ const s = weekStart(y, w), e = new Date(s); e.setDate(s.getDate()+6); const f = d => `${d.getDate()} ${AYLAR[d.getMonth()].slice(0,3)}`; return `${f(s)} – ${f(e)}`; }
+const weeksInYear = y => isoWeek(new Date(y, 11, 28)).w;
+const daysSince = s => { const d = parseD(s); return d ? Math.floor((Date.now() - d) / 864e5) : null; };
+function fnv(s){ let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); }
+function riskOf(o, s){ const p = (Number(o)||0) * (Number(s)||0); if (!p) return {p:0, k:'', t:'—'}; if (p >= 20) return {p, k:'r-vhigh', t:'Çok yüksek'}; if (p >= 12) return {p, k:'r-high', t:'Yüksek'}; if (p >= 6) return {p, k:'r-mid', t:'Orta'}; return {p, k:'r-low', t:'Düşük'}; }
+const RISK_TXT = {'Çok yüksek':'Çok Yüksek Risk / Acil Önlem Alınmalı','Yüksek':'Yüksek Risk / Kısa Süre İçinde Risk Azaltılmalı','Orta':'Orta Seviye Risk / Risk Değerlendirilmeli ve Azaltılmalı','Düşük':'Düşük Risk / Tolere Edilebilir, Makul Süre İçinde Risk Azaltılmalı'};
+/* Güvenlik: veritabanından gelen her kayıt ekrana basılmadan önce temizlenir */
+const bid = v => (typeof v === 'string' && /^[0-9a-f]{32}$/.test(v)) ? v : null;
+const blobUrl = id => bid(id) ? '/_blob/' + id : '';
+const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const NUMK = new Set(['yil','ay','hafta','haftaYil','adet','kayipGun','olasilik','siddet','sifirlaSurumu','tutar','yansitmaTutar','katilimci']);
+function clean(r){
+  if (!r || typeof r !== 'object') return null;
+  const o = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (BAD_KEYS.has(k)) continue;
+    if (k === 'foto' || k === 'kanitFoto' || k === 'belge') { o[k] = Array.isArray(v) ? v.filter(bid) : []; continue; }
+    if (NUMK.has(k)) { if (v == null || v === '') { o[k] = null; continue; } const n = Number(v); o[k] = Number.isFinite(n) ? n : null; continue; }
+    o[k] = (v == null || typeof v === 'boolean') ? v : (typeof v === 'number' ? (Number.isFinite(v) ? v : null) : (typeof v === 'string' ? v : ''));
+  }
+  if (!Array.isArray(o.foto)) o.foto = [];
+  return /^\d{4}-\d{2}-\d{2}$/.test(o.tarih || '') ? o : null;
+}
+const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+function toast(msg){ const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+const opts = (arr, sel, blank) => (blank != null ? `<option value="">${esc(blank)}</option>` : '') + arr.map(v => `<option${v === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
+const uniq = a => [...new Set(a.filter(Boolean))];
+
+/* ---------- durum ---------- */
+const today = new Date();
+const cw = isoWeek(today);
+const S = {
+  db:null, assets:null, downloads:null, user:null, meId:null, isEditor:false, canWrite:true, ready:false,
+  cfg:{...DEF}, months:{}, dofs:[], kazalar:[], yil:cw.y, hafta:cw.w, tab:'aktivite', unsub:[], names:{}
+};
+const acts = () => S._ac || (S._ac = Object.values(S.months).flat().map(clean).filter(Boolean).map(r => normAkt(withAlt(withLok(r)))).filter(Boolean));
+Object.defineProperty(S, 'dofs', { get(){ return S._dc || (S._dc = (S._dofsRaw || []).map(clean).filter(Boolean).map(withLok)); }, configurable:true });
+Object.defineProperty(S, 'cezalar', { get(){ return S._zc || (S._zc = (S._czRaw || []).map(clean).filter(Boolean).filter(r => !r.tip || r.tip === 'Ceza').map(r => ({ ...withLok(r), tip:'Ceza', belge: r.belge || [] }))); }, configurable:true });
+Object.defineProperty(S, 'kazalar', { get(){ return S._kc || (S._kc = (S._kazRaw || []).map(clean).filter(Boolean).map(r => kazaNorm(withLok(r)))); }, configurable:true });
+applyFields();
+const actsWeek = (y, w) => acts().filter(a => a.haftaYil === y && a.hafta === w);
+const inWeek = (s, y, w) => { const d = parseD(s); if (!d) return false; const i = isoWeek(d); return i.y === y && i.w === w; };
+
+/* ---------- sekmeler ---------- */
+const TABS = [['aktivite','Aktivite'],['kaza','Kaza Rapor'],['foto','Fotoğraflar'],['rapor','Rapor'],['dof','DÖF'],['ceza','Ceza'],['kullanici','Kullanıcılar'],['ayar','Ayarlar'],['hesap','Hesabım']];
+function renderTabs(){
+  $('#tabs').innerHTML = TABS.filter(t => !['ayar','kullanici'].includes(t[0]) || S.isAdmin).map(([k,l]) => `<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}</button>`).join('');
+}
+function go(tab){ if (!AUTH.me) return; if (['ayar','kullanici'].includes(tab) && !S.isAdmin) tab = 'aktivite'; S.tab = tab; ls.set('isg.tab', tab); document.querySelectorAll('section.view').forEach(s => s.hidden = s.id !== 'v-' + tab); renderTabs(); render(); window.scrollTo(0,0); }
+document.addEventListener('click', e => { const b = e.target.closest('[data-tab],[data-goto]'); if (b) go(b.dataset.tab || b.dataset.goto); });
+
+/* ---------- hafta seçicileri ---------- */
+function weekOptions(sel, withAll){
+  const max = S.yil === cw.y ? cw.w : weeksInYear(S.yil);
+  let h = withAll ? '<option value="0">Tüm yıl</option>' : '';
+  for (let w = max; w >= 1; w--) h += `<option value="${w}"${w===sel?' selected':''}>${w}. hafta · ${weekLabel(S.yil, w)}</option>`;
+  return h;
+}
+
+/* ---------- render ---------- */
+let raf = 0;
+function render(){ cancelAnimationFrame(raf); raf = requestAnimationFrame(doRender); }
+function doRender(){
+  
+  if (!AUTH.me) return;
+  const r = { aktivite:rAkt, ceza:rCeza, dof:rDof, kaza:rKaza, foto:rFoto, rapor:rRapor, ayar:rAyar, kullanici:rKullanici, hesap:rHesap }[S.tab];
+  try { r && r(); } catch (err) { console.error(err); toast('Bu sayfada okunamayan bir kayıt var; yöneticinize bildirin.'); }
+}
+
+function rStatus(){}
+
+/* PANEL */
+document.addEventListener('click', e => { const r = e.target.closest('[data-dof]'); if (r) openDof(r.dataset.dof); });
+
+/* ---------- fotoğraf alanı ---------- */
+const pending = {}; // inputId -> File[]
+function bindDrop(root){
+  root.querySelectorAll('.drop').forEach(dz => {
+    const id = dz.dataset.for, inp = dz.querySelector('input[type=file]');
+    pending[id] = pending[id] || [];
+    const draw = () => { dz.querySelector('.thumbs').innerHTML = (dz._existing||[]).filter(bid).map(fid => `<div class="thumb"><img src="${blobUrl(fid)}" alt="" data-zoom="${esc(fid)}"></div>`).join('') + pending[id].map((f,i) => `<div class="thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" data-rm="${i}" aria-label="Kaldır">×</button></div>`).join(''); };
+    dz._draw = draw;
+    inp.addEventListener('change', () => { pending[id].push(...[...inp.files].filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))); inp.value = ''; draw(); });
+    dz.addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { pending[id].splice(+b.dataset.rm, 1); draw(); } });
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); pending[id].push(...[...e.dataTransfer.files].filter(f => f.type.startsWith('image/'))); draw(); });
+    if (!S.assets) dz.querySelector('.hint').textContent = S.db ? 'Fotoğraf yüklemek için bu sayfada düzenleme yetkiniz olmalı.' : 'Fotoğraf yükleme, sayfa Claude içinde açıldığında çalışır.';
+    draw();
+  });
+}
+async function compress(file){
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+  } catch { return null; }
+}
+async function uploadAll(id, msgEl){
+  const files = pending[id] || []; const ids = [];
+  if (!files.length) return ids;
+  if (!S.assets) throw new Error('Fotoğraf yükleme yetkiniz yok; kaydı fotoğrafsız kaydetmek için fotoğrafları kaldırın.');
+  for (let i = 0; i < files.length; i++) {
+    msgEl.textContent = `Fotoğraf yükleniyor ${i+1}/${files.length}…`;
+    const small = await compress(files[i]);
+    try { const r = await S.assets.upload(small || files[i], { type: small ? 'image/jpeg' : (files[i].type || 'image/jpeg') }); ids.push(r.id); }
+    catch (e) { throw new Error(e?.code === 'quota_exceeded' ? 'Fotoğraf depolama alanı doldu. Eski fotoğrafları silin.' : e?.code === 'too_large' ? 'Fotoğraf 20 MB sınırını aşıyor.' : 'Fotoğraf yüklenemedi: ' + (e?.message || e?.code || 'bilinmeyen hata')); }
+  }
+  return ids;
+}
+function clearPending(id, root){ pending[id] = []; const dz = (root||document).querySelector(`.drop[data-for="${id}"]`); if (dz) { dz._existing = []; dz._draw && dz._draw(); } }
+
+/* ---------- lightbox ---------- */
+document.addEventListener('click', e => { const z = e.target.closest('[data-zoom]'); if (z) { e.preventDefault(); lightbox(z.dataset.zoom, z.dataset.cap || '', z.dataset.fname || ('foto_' + z.dataset.zoom.slice(0,8) + '.jpg')); } });
+function lightbox(id, cap, fname){
+  const L = document.createElement('div'); L.className = 'lightbox';
+  if (!bid(id)) return;
+  L.innerHTML = `<div class="cap"></div><div class="bar"><button class="btn sm" data-dl>İndir</button><button class="btn sm" data-x>Kapat</button></div>`;
+  const im = document.createElement('img'); im.src = blobUrl(id); im.alt = ''; L.prepend(im); L.querySelector('.cap').textContent = cap;
+  L.addEventListener('click', async e => {
+    if (e.target === L || e.target.closest('[data-x]')) L.remove();
+    if (e.target.closest('[data-dl]')) { try { const b = await (await fetch(blobUrl(id))).blob(); await saveFile(fname, b); } catch { toast('Fotoğraf indirilemedi'); } }
+  });
+  document.body.appendChild(L);
+}
+async function saveFile(filename, data){
+  if (!S.downloads) { toast('İndirme bu görünümde kullanılamıyor'); return false; }
+  try { await S.downloads.save({ filename, data }); return true; }
+  catch (e) { if (e?.code !== 'declined') toast('Dosya kaydedilemedi: ' + (e?.code || 'hata')); return false; }
+}
+
+/* ---------- AKTİVİTE ---------- */
+function fieldHtml(f){
+  const id = 'a-' + f.key, req = f.zorunlu ? ' <span class="req">*</span>' : '', ph = f.yer ? ` placeholder="${esc(f.yer)}"` : '';
+  const kos = f.kosul?.degerler?.length ? ` data-kosul="${esc(f.kosul.alan)}"` : '';
+  const wrap = (inner, full) => `<div class="fld${full ? ' full' : ''}" data-key="${esc(f.key)}"${kos}><label for="${esc(id)}">${esc(f.ad)}${req}</label>${inner}</div>`;
+  if (f.tip === 'liste') { let o = f.secenekler || []; if (f.key === 'raporlayan') { const me = tru(AUTH.me?.ad); if (me) o = uniq([me, ...o]); } return wrap(`<select id="${esc(id)}">${opts(o, '', f.zorunlu ? 'Seçin' : '—')}</select>`); }
+  if (f.tip === 'sayi') return wrap(`<input type="number" id="${esc(id)}" min="0" inputmode="numeric"${ph}>`);
+  if (f.tip === 'uzun') return wrap(`<textarea id="${esc(id)}"${ph}></textarea>`, true);
+  if (f.tip === 'foto') return wrap(`<div class="drop" data-for="${esc(id)}"><input type="file" id="${esc(id)}" accept="image/*" multiple><div class="thumbs"></div><span class="hint">${esc(f.yer || "Fotoğraflar 1600 px'e küçültülerek yüklenir. Hafta ve lokasyona göre klasörlenir.")}</span></div>`, true);
+  return wrap(`<input id="${esc(id)}"${ph}>`);
+}
+/* Koşullu alanlar: bir alan, başka bir liste alanında seçilen değere göre açılır. Zincir desteklenir (üst alan gizliyse alt alan da gizlenir). */
+function fieldVisible(fs, valOf){
+  const by = new Map(fs.map(f => [f.key, f])), memo = new Map();
+  const vis = (k, d) => { if (memo.has(k)) return memo.get(k); const f = by.get(k); let r;
+    if (!f) r = false; else if (!f.kosul?.degerler?.length || d > 20) r = true;
+    else { const p = by.get(f.kosul.alan); r = !!p && vis(p.key, d + 1) && f.kosul.degerler.includes(valOf(p.key)); }
+    memo.set(k, r); return r; };
+  return k => vis(k, 0);
+}
+function aktFormVis(){ const v = fieldVisible(activeFields(), k => document.getElementById('a-' + k)?.value || ''); document.querySelectorAll('#f-akt [data-key]').forEach(w => { w.hidden = !v(w.dataset.key); }); }
+function rAkt(){
+  const f = $('#f-akt'); const sig = JSON.stringify(activeFields()) + '|' + (AUTH.me?.ad || '');
+  if (f._sig !== sig) {
+    const keep = {}; f.querySelectorAll('input:not([type=file]),select,textarea').forEach(el => { if (el.id) keep[el.id] = el.value; });
+    f.innerHTML = `<div class="fld"><label for="a-tarih">Tarih <span class="req">*</span></label><input type="date" id="a-tarih"></div>` + activeFields().map(fieldHtml).join('') + `<div class="actions"><button class="btn primary" type="submit" id="a-save">Kaydet</button><span class="muted" id="a-msg"></span></div>`;
+    Object.entries(keep).forEach(([k, v]) => { const el = document.getElementById(k); if (el && v !== '' && (el.tagName !== 'SELECT' || [...el.options].some(o => o.value === v))) el.value = v; });
+    if (!$('#a-tarih').value) $('#a-tarih').value = ymd(new Date());
+    const r = $('#a-raporlayan'); if (r && !r.value) { const v = [tru(AUTH.me?.ad), ls.get('isg.me')].find(x => x && [...r.options].some(o => o.value === x)); if (v) r.value = v; }
+    bindDrop(f); f._sig = sig;
+  }
+  if (!f._init) { f._init = true; f.addEventListener('submit', saveAkt); f.addEventListener('change', e => { if (e.target.tagName === 'SELECT') aktFormVis(); if (e.target.id === 'a-raporlayan') { ls.set('isg.me', e.target.value); rAktList(); } }); }
+  aktFormVis();
+  $('#a-save').disabled = !S.db || !S.canWrite;
+  rAktList();
+}
+function rAktList(){
+  const me = $('#a-raporlayan').value;
+  const mine = actsWeek(S.yil, cw.w).filter(a => !me || a.raporlayan === me).sort((a,b) => (b.tarih+(b.olusturma||'')).localeCompare(a.tarih+(a.olusturma||'')));
+  $('#a-list-title').textContent = me ? `${me} · ${cw.w}. hafta (${mine.length})` : `${cw.w}. hafta tüm girişler (${mine.length})`;
+  $('#a-list').innerHTML = mine.length ? `<div class="tablewrap" style="border:0"><table><thead><tr><th>Tarih</th><th>Aktivite</th><th>Lokasyon</th><th>Açıklama</th><th class="n">Foto</th></tr></thead><tbody>${mine.map(a => `<tr><td class="mono">${trD(a.tarih)}</td><td>${esc(a.aktivite)}</td><td>${esc(a.lokasyon||'')}</td><td><div class="clamp">${esc(a.aciklama||'')}</div></td><td class="n">${photoCell(a.foto, a)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Bu hafta henüz kayıt yok. Yukarıdaki formla ilk aktiviteyi girin.</div>';
+}
+function photoCell(ids, rec){ ids = (Array.isArray(ids) ? ids : []).filter(bid); if (!ids.length) return '<span class="zero">0</span>'; return `<a href="#" data-zoom="${esc(ids[0])}" data-cap="${esc((rec.aktivite||rec.formNo||'') + ' · ' + (rec.lokasyon||'') + ' · ' + trD(rec.tarih))}">${ids.length} ▸</a>`; }
+async function saveAkt(e){
+  e.preventDefault();
+  const msg = $('#a-msg'), btn = $('#a-save'), tarih = $('#a-tarih').value;
+  const vis = activeFields().filter(f => { const w = document.querySelector(`#f-akt [data-key="${CSS.escape(f.key)}"]`); return w && !w.hidden; });
+  if (!tarih) { msg.textContent = 'Tarih zorunlu.'; return; }
+  for (const f of vis) { if (!f.zorunlu) continue;
+    const empty = f.tip === 'foto' ? !(pending['a-' + f.key] || []).length : !String(document.getElementById('a-' + f.key)?.value || '').trim();
+    if (empty) { msg.textContent = `${f.ad} zorunlu.`; return; } }
+  if (!S.db) { msg.textContent = 'Kayıt için sayfayı Claude içinde, oturum açarak açın.'; return; }
+  btn.disabled = true;
+  try {
+    const d = parseD(tarih), iw = isoWeek(d);
+    const rec = { tarih, yil:d.getFullYear(), ay:d.getMonth()+1, donem:tarih.slice(0,7), hafta:iw.w, haftaYil:iw.y, foto:[], olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:new Date().toISOString(), kaynak:'uygulama' };
+    for (const f of vis) { const el = document.getElementById('a-' + f.key);
+      if (f.tip === 'foto') rec[f.key] = await uploadAll('a-' + f.key, msg);
+      else if (f.tip === 'sayi') rec[f.key] = el.value === '' ? null : Number(el.value);
+      else rec[f.key] = f.key === 'plaka' ? plakaNorm(el.value) : el.value.trim(); }
+    msg.textContent = 'Kaydediliyor…';
+    await S.db.collection('aktiviteler').doc().set(rec);
+    const STICKY = ['raporlayan','aktivite','lokasyon','altYuklenici'];
+    activeFields().forEach(f => { if (STICKY.includes(f.key)) return; if (f.tip === 'foto') clearPending('a-' + f.key); else { const el = document.getElementById('a-' + f.key); if (el) el.value = ''; } });
+    msg.textContent = ''; toast('Aktivite kaydedildi');
+  } catch (err) { msg.textContent = err.message || ('Kaydedilemedi: ' + (err.code || '')); }
+  finally { btn.disabled = false; }
+}
+
+/* ---------- DÖF ---------- */
+/* ---------- CEZA & ÖDÜL ----------
+   Eski Excel'de CEZA TABLOSU, BİLGİ KAYIT sayfasındaki elle girilen aylık "KESİLEN CEZA" satırından,
+   ayrıntılar ise "Mikrolink Ceza Tablosu" sayfasından geliyordu. Burada her ceza tek kayıt; aylık tablo kayıtlardan hesaplanır. */
+const TL = v => (Number(v) || 0).toLocaleString('tr-TR', { maximumFractionDigits:2 }) + ' ₺';
+function rCeza(){
+  const cz = S.cezalar.filter(c => c.yil === S.yil), sum = (a, k) => a.reduce((s,c) => s + (Number(c[k]) || 0), 0);
+  const K = [[cz.length, `${S.yil} ceza`], [TL(sum(cz, 'tutar')), 'Kesilen ceza tutarı', sum(cz,'tutar') > 0], [TL(sum(cz, 'yansitmaTutar')), 'Yansıtılan (rücu)'], [TL(sum(cz, 'tutar') - sum(cz, 'yansitmaTutar')), 'Mikrolink\'e kalan'], [TL(cz.length ? Math.round(sum(cz, 'tutar') / cz.length) : 0), 'Ortalama ceza']];
+  $('#cz-kpis').innerHTML = K.map(([v,l,al]) => `<div class="kpi${al ? ' alert' : ''}"><div class="v num">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join('');
+  document.querySelectorAll('[data-czyeni]').forEach(b => b.disabled = !S.db || !S.canWrite);
+  const list = [...S.cezalar].sort((a,b) => b.tarih.localeCompare(a.tarih));
+  $('#cz-table').innerHTML = `<thead><tr><th>Tarih</th><th>Lokasyon</th><th class="n">Tutar</th><th>Cezayı kesen</th><th>Ceza kesilen</th><th>Yansıtılan</th><th class="n">Yansıtılan tutar</th><th>Ceza maddesi</th><th class="n">Belge</th></tr></thead><tbody>` +
+    (list.length ? list.map(c => `<tr class="click" data-cz="${esc(c.id)}"><td class="mono">${trD(c.tarih)}</td><td>${esc(c.lokasyon || '')}</td><td class="n">${esc(TL(c.tutar))}</td><td>${esc(c.cezayiKesen || '')}</td><td>${esc(c.cezaKesilen || '')}</td><td>${esc(c.yansitma || '—')}</td><td class="n">${c.yansitmaTutar ? esc(TL(c.yansitmaTutar)) : '—'}</td><td><div class="clamp">${esc(c.madde || c.aciklama || '')}</div></td><td class="n">${(c.belge || []).length + (bid(c.belgePdfId) ? 1 : 0)}</td></tr>`).join('')
+    : `<tr><td colspan="9"><div class="empty" style="border:0">Henüz ceza kaydı yok. “+ Ceza” ile kesilen cezayı girin.</div></td></tr>`) + '</tbody>';
+}
+document.addEventListener('click', e => { const n = e.target.closest('[data-czyeni]'); if (n) openCeza(null, n.dataset.czyeni); const r = e.target.closest('[data-cz]'); if (r) openCeza(r.dataset.cz); });
+function openCeza(id, tip){
+  const c = id ? S.cezalar.find(x => x.id === id) : null; if (id && !c) return;
+  const v = c || { tarih:ymd(today), tip:tip || 'Ceza', proje:'MTX', cezayiKesen:'Vodafone', cezaKesilen:'Mikrolink', belge:[] };
+  const canDel = c && (S.isAdmin || c.olusturan === S.meId);
+  const kesilenOpts = uniq(['Mikrolink', ...S.cfg.altyukleniciler, v.cezaKesilen]);
+  const yansOpts = uniq([...S.cfg.altyukleniciler, ...S.cfg.firmalar.filter(x => x !== 'Vodafone'), v.yansitma]);
+  const maddeler = uniq(S.cezalar.map(x => x.madde).filter(Boolean));
+  const o = sheet(`<header><h2>${c ? 'Cezayı düzenle' : 'Yeni ceza'}</h2><button class="btn sm" data-close>Kapat</button></header>
+  <form class="f" id="f-cz" novalidate>
+    <div class="fld"><label for="c-tarih">Tarih <span class="req">*</span></label><input type="date" id="c-tarih" value="${esc(v.tarih)}"></div>
+    <div class="fld"><label for="c-lok">Lokasyon</label><select id="c-lok">${opts(S.cfg.lokasyonlar, v.lokasyon, '—')}</select></div>
+    <div class="fld"><label for="c-proje">Proje</label><input id="c-proje" value="${esc(v.proje || '')}"></div>
+    <div class="fld t-ceza"><label for="c-tutar">Ceza tutarı (₺) <span class="req">*</span></label><input type="number" min="0" step="0.01" id="c-tutar" value="${esc(v.tutar ?? '')}" inputmode="decimal"></div>
+    <div class="fld t-ceza"><label for="c-kesen">Cezayı kesen</label><select id="c-kesen">${opts(uniq(['Vodafone','Mikrolink','Diğer', v.cezayiKesen]), v.cezayiKesen || 'Vodafone')}</select></div>
+    <div class="fld t-ceza"><label for="c-kesilen">Ceza kesilen firma</label><select id="c-kesilen">${opts(kesilenOpts, v.cezaKesilen, '—')}</select></div>
+    <div class="fld t-ceza"><label for="c-yans">Yansıtılan (rücu edilen) firma</label><select id="c-yans">${opts(yansOpts, v.yansitma, 'Yansıtılmadı')}</select></div>
+    <div class="fld t-ceza"><label for="c-ytutar">Yansıtılan tutar (₺)</label><input type="number" min="0" step="0.01" id="c-ytutar" value="${esc(v.yansitmaTutar ?? '')}" inputmode="decimal"></div>
+    <div class="fld full t-ceza"><label for="c-madde">Ceza maddesi</label><input id="c-madde" list="c-maddeler" value="${esc(v.madde || '')}" placeholder="ör. A8. Kişisel Koruyucu Donanım"><datalist id="c-maddeler">${maddeler.map(m => `<option value="${esc(m)}">`).join('')}</datalist></div>
+    <div class="fld full"><label for="c-acik" id="c-acik-l">Açıklama</label><textarea id="c-acik" rows="3">${esc(v.aciklama || '')}</textarea></div>
+    <div class="fld full"><label for="c-belgenot">Belge notu</label><input id="c-belgenot" value="${esc(v.belgeNot || '')}" placeholder="ör. CRC Telekom firmasına rücu edildi."></div>
+    <div class="fld full"><label for="c-belge">Belge görüntüsü</label><div class="drop" data-for="c-belge"><input type="file" id="c-belge" accept="image/*" multiple><div class="thumbs"></div><span class="hint">Ceza yazısı veya tutanağın fotoğrafı</span></div></div>
+    <div class="fld full"><label for="c-pdf">PDF belge</label><input type="file" id="c-pdf" accept="application/pdf"><span class="hint" id="c-pdf-info">${bid(v.belgePdfId) ? `Kayıtlı: <a href="#" data-czpdf="${esc(v.belgePdfId)}" data-czpdfad="${esc(v.belgePdfAd || 'belge.pdf')}">${esc(v.belgePdfAd || 'belge.pdf')}</a> · yeni dosya seçerseniz değiştirilir` : 'En fazla 20 MB'}</span></div>
+    <div class="actions"><button class="btn primary" type="submit" id="c-save"${!S.db || !S.canWrite ? ' disabled' : ''}>${c ? 'Güncelle' : 'Kaydet'}</button>${canDel ? '<button class="btn danger" type="button" id="c-del">Sil</button>' : ''}<span class="muted" id="c-msg"></span></div>
+  </form>`);
+  const fm = o.querySelector('#f-cz'), q = x => fm.querySelector(x);
+  pending['c-belge'] = []; bindDrop(fm); const dz = fm.querySelector('.drop'); dz._existing = v.belge || []; dz._draw();
+  const t = 'Ceza';
+  q('#c-yans').addEventListener('change', () => { if (q('#c-yans').value && !q('#c-ytutar').value) q('#c-ytutar').value = q('#c-tutar').value; if (!q('#c-yans').value) q('#c-ytutar').value = ''; });
+  const del = q('#c-del');
+  if (del) del.addEventListener('click', async () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = 'Emin misiniz? Sil'; setTimeout(() => { delete del.dataset.sure; del.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc('cezalar/' + c.id).delete(); o.remove(); toast('Kayıt silindi'); } catch (err) { toast('Silinemedi: ' + (err.code || '')); } });
+  fm.addEventListener('submit', async e => { e.preventDefault(); const m = q('#c-msg'), g = x => q(x).value;
+    const tarih = g('#c-tarih'), num = x => x === '' ? null : Math.max(0, Number(x));
+    if (!tarih) return m.textContent = 'Tarih zorunlu.';
+    if (t === 'Ceza' && !(Number(g('#c-tutar')) > 0)) return m.textContent = 'Ceza tutarını girin.';
+    if (t === 'Ceza' && g('#c-ytutar') && Number(g('#c-ytutar')) > Number(g('#c-tutar'))) return m.textContent = 'Yansıtılan tutar ceza tutarından büyük olamaz.';
+    const pdf = q('#c-pdf').files[0];
+    if (pdf && (pdf.type !== 'application/pdf' || pdf.size > 20 * 1048576)) return m.textContent = 'PDF dosyası seçin (en fazla 20 MB).';
+    const btn = q('#c-save'); btn.disabled = true;
+    try {
+      const belge = [...(v.belge || []), ...await uploadAll('c-belge', m)];
+      let belgePdfId = bid(v.belgePdfId) || '', belgePdfAd = v.belgePdfAd || '';
+      if (pdf) { if (!S.assets) throw new Error('Belge yükleme yetkiniz yok.'); m.textContent = 'PDF yükleniyor…'; const r = await S.assets.upload(pdf, { type:'application/pdf' }); belgePdfId = r.id; belgePdfAd = pdf.name.slice(0, 120); }
+      const d = parseD(tarih);
+      const rec = { tip:t, tarih, yil:d.getFullYear(), ay:d.getMonth() + 1, lokasyon:g('#c-lok'), proje:g('#c-proje').trim(), aciklama:g('#c-acik').trim(), belgeNot:g('#c-belgenot').trim(), belge, belgePdfId, belgePdfAd,
+        tutar: num(g('#c-tutar')),
+        cezayiKesen: t === 'Ceza' ? g('#c-kesen') : '', cezaKesilen: t === 'Ceza' ? g('#c-kesilen') : '', yansitma: t === 'Ceza' ? g('#c-yans') : '', yansitmaTutar: t === 'Ceza' && g('#c-yans') ? num(g('#c-ytutar')) : null, madde: t === 'Ceza' ? g('#c-madde').trim() : '',
+        altYuklenici: g('#c-yans') && S.cfg.altyukleniciler.includes(g('#c-yans')) ? g('#c-yans') : (S.cfg.altyukleniciler.includes(g('#c-kesilen')) ? g('#c-kesilen') : ''),
+        guncelleyen:S.meId, guncelleme:new Date().toISOString() };
+      m.textContent = 'Kaydediliyor…';
+      if (c) await S.db.doc('cezalar/' + c.id).update(rec); else await S.db.collection('cezalar').doc().set({ ...rec, olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:rec.guncelleme, kaynak:'uygulama' });
+      o.remove(); toast('Ceza kaydedildi');
+    } catch (err) { m.textContent = err.message || ('Kaydedilemedi: ' + (err.code || '')); btn.disabled = false; }
+  });
+}
+document.addEventListener('click', async e => { const a = e.target.closest('[data-czpdf]'); if (!a) return; e.preventDefault(); const id = bid(a.dataset.czpdf); if (!id) return; try { const b = await (await fetch(blobUrl(id))).blob(); await saveFile(a.dataset.czpdfad || 'belge.pdf', b); } catch { toast('Belge indirilemedi'); } });
+
+function rDof(){
+  const lk = $('#dof-lok').value; $('#dof-lok').innerHTML = opts(S.cfg.lokasyonlar, lk, 'Tüm lokasyonlar');
+  const dal = $('#dof-alt').value; $('#dof-alt').innerHTML = opts(uniq([...S.cfg.altyukleniciler, ...S.dofs.map(d => d.altYuklenici)]), dal, 'Tüm alt yükleniciler');
+  $('#dof-new').disabled = !S.db || !S.canWrite;
+  const du = $('#dof-durum').value, q = tru($('#dof-q').value);
+  let list = S.dofs.filter(d => (du === 'acik' ? d.durum === 'Devam Ediyor' : !du || d.durum === du) && (!lk || d.lokasyon === lk) && (!dal || d.altYuklenici === dal) && (!q || tru([d.gozlem,d.formNo,d.sorumlu,d.aksiyon].join(' ')).includes(q)));
+  const age = d => d.durum === 'Devam Ediyor' ? daysSince(d.tarih) : (d.kapanisTarih ? Math.round((parseD(d.kapanisTarih) - parseD(d.tarih)) / 864e5) : null);
+  const SK = { risk:d => riskOf(d.olasilik, d.siddet).p, formNo:d => d.formNo || '', tarih:d => d.tarih || '', lokasyon:d => d.lokasyon || '', altYuklenici:d => d.altYuklenici || '', gozlem:d => d.gozlem || '', sorumlu:d => d.sorumlu || '', bekleme:d => age(d) ?? -1, durum:d => d.durum || '', foto:d => (d.foto||[]).length + (d.kanitFoto||[]).length };
+  const srt = S.dofSort || (du === 'acik' ? { key:'risk', dir:-1 } : { key:'tarih', dir:-1 });
+  list.sort((a,b) => { const x = SK[srt.key](a), y = SK[srt.key](b); const c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'tr'); return c * srt.dir || b.tarih.localeCompare(a.tarih); });
+  const th = (key, label, n) => `<th${n ? ' class="n"' : ''} aria-sort="${srt.key === key ? (srt.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="sortbtn" data-dsort="${key}">${label}<span class="arr">${srt.key === key ? (srt.dir > 0 ? '▲' : '▼') : '↕'}</span></button></th>`;
+  const pill = s => s === 'Tamamlandı' ? 'ok' : s === 'İptal' ? '' : 'warn';
+  $('#dof-table').innerHTML = `<thead><tr>${th('risk','Risk')}${th('formNo','Form no')}${th('tarih','Tarih')}${th('lokasyon','Lokasyon')}${th('altYuklenici','Alt yüklenici')}${th('gozlem','Gözlem')}${th('sorumlu','Sorumlu')}${th('bekleme','Bekleme',1)}${th('durum','Durum')}${th('foto','Foto',1)}</tr></thead><tbody>` +
+    (list.length ? list.slice(0, 400).map(d => { const r = riskOf(d.olasilik, d.siddet); const ag = age(d);
+      return `<tr class="click" data-dof="${esc(d.id)}"><td><span class="risk ${r.k}"><span class="sc">${r.p||'—'}</span></span></td><td class="mono">${esc(d.formNo||'')}</td><td class="mono">${trD(d.tarih)}</td><td>${esc(d.lokasyon||'')}</td><td>${esc(d.altYuklenici||'')}</td><td><div class="clamp">${esc(d.gozlem)}</div></td><td><div class="clamp">${esc(d.sorumlu||'')}</div></td><td class="n">${ag==null?'—':ag+' g'}</td><td><span class="pill ${pill(d.durum)}">${esc(d.durum||'')}</span></td><td class="n">${(d.foto||[]).length + (d.kanitFoto||[]).length}</td></tr>`; }).join('')
+    : `<tr><td colspan="10"><div class="empty" style="border:0">${S.dofs.length ? 'Filtreye uyan DÖF yok.' : 'Henüz DÖF yok. “+ Yeni DÖF” ile ilk uygunsuzluğu kaydedin.'}</div></td></tr>`) + '</tbody>';
+}
+['#dof-durum','#dof-lok','#dof-alt'].forEach(s => $(s).addEventListener('change', render)); $('#dof-q').addEventListener('input', render);
+$('#dof-new').addEventListener('click', () => openDof(null));
+document.addEventListener('click', e => { const b = e.target.closest('[data-dsort]'); if (!b) return; e.stopPropagation(); const key = b.dataset.dsort, cur = S.dofSort; S.dofSort = { key, dir: cur && cur.key === key ? -cur.dir : (['tarih','risk','bekleme','foto'].includes(key) ? -1 : 1) }; render(); });
+$('#dof-durum').addEventListener('change', () => { S.dofSort = null; });
+
+function nextFormNo(bildiren){
+  const ini = (bildiren || 'XX').split(/\s+/).slice(0,2).map(w => w[0]).join('') || 'XX';
+  const seqs = S.dofs.filter(d => d.yil === S.yil && (d.formNo||'').startsWith(ini + '_')).map(d => parseInt(d.formNo.split('_')[1], 10)).filter(n => !isNaN(n));
+  return `${ini}_${pad((seqs.length ? Math.max(...seqs) : 0) + 1)}`;
+}
+function sheet(html){ const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`; o.addEventListener('click', e => { if (e.target === o || e.target.closest('[data-close]')) o.remove(); }); $('#layer').appendChild(o); return o; }
+function openDof(id){
+  const d = id ? S.dofs.find(x => x.id === id) : null; if (id && !d) return;
+  const v = d || { tarih:ymd(today), bildiren:ls.get('isg.me')||'', durum:'Devam Ediyor', bildirimTuru:'Güvensiz Durum/Davranış', firma:'Vodafone' };
+  const canDel = d && (S.isAdmin || d.olusturan === S.meId || (d.olusturanEmail && d.olusturanEmail === AUTH.me?.email));
+  const o = sheet(`<header><h2>${d ? 'DÖF ' + esc(d.formNo||'') : 'Yeni DÖF'}</h2><button class="btn sm" data-close>Kapat</button></header>
+  <form class="f" id="f-dof" novalidate>
+    <div class="fld"><label for="d-tarih">Tarih <span class="req">*</span></label><input type="date" id="d-tarih" value="${esc(v.tarih)}"></div>
+    <div class="fld"><label for="d-bildiren">Bildiren <span class="req">*</span></label><select id="d-bildiren">${opts(uniq([...S.cfg.uzmanlar, v.bildiren]), v.bildiren, 'Seçin')}</select></div>
+    <div class="fld"><label for="d-formno">Form no</label><input id="d-formno" class="mono" value="${esc(v.formNo || '')}" placeholder="otomatik"></div>
+    <div class="fld"><label for="d-lok">Lokasyon <span class="req">*</span></label><select id="d-lok">${opts(S.cfg.lokasyonlar, v.lokasyon, 'Seçin')}</select></div>
+    <div class="fld"><label for="d-firma">İletilen firma / departman</label><select id="d-firma">${opts(uniq([...S.cfg.firmalar, v.firma]), v.firma, '—')}</select></div>
+    <div class="fld"><label for="d-alt">Alt yüklenici</label><select id="d-alt">${opts(uniq([...S.cfg.altyukleniciler, v.altYuklenici]), v.altYuklenici, '—')}</select></div>
+    <div class="fld"><label for="d-bild">Bildirim türü</label><select id="d-bild">${opts(['Güvensiz Durum/Davranış','Güvenli Durum/Davranış'], v.bildirimTuru)}</select></div>
+    <div class="fld"><label for="d-uyg">Uygunsuzluk türü</label><select id="d-uyg">${opts(uniq([...UYG, v.uygunsuzlukTuru]), v.uygunsuzlukTuru, 'Seçin')}</select></div>
+    <div class="fld full"><label for="d-gozlem">Gözlem <span class="req">*</span></label><textarea id="d-gozlem" placeholder="Tespit edilen durum">${esc(v.gozlem||'')}</textarea></div>
+    <div class="fld"><label for="d-o">Olasılık (1–5)</label><select id="d-o">${opts(['1','2','3','4','5'], String(v.olasilik||''), '—')}</select></div>
+    <div class="fld"><label for="d-s">Şiddet (1–5)</label><select id="d-s">${opts(['1','2','3','4','5'], String(v.siddet||''), '—')}</select></div>
+    <div class="fld"><label>Risk puanı</label><div id="d-risk" style="min-height:42px;display:flex;align-items:center"></div></div>
+    <div class="fld full"><label for="d-aksiyon">Aksiyon</label><textarea id="d-aksiyon" placeholder="Alınması gereken önlem">${esc(v.aksiyon||'')}</textarea></div>
+    <div class="fld"><label for="d-sorumlu">Aksiyon sorumlusu</label><input id="d-sorumlu" value="${esc(v.sorumlu||'')}"></div>
+    <div class="fld"><label for="d-hedef">Hedef tarih</label><input type="date" id="d-hedef" value="${esc(v.hedefTarih||'')}"></div>
+    <div class="fld"><label for="d-durum">Durum</label><select id="d-durum">${opts(['Devam Ediyor','Tamamlandı','İptal'], v.durum)}</select></div>
+    <div class="fld"><label for="d-kapanis">Gerçekleşen tarih</label><input type="date" id="d-kapanis" value="${esc(v.kapanisTarih||'')}"></div>
+    <div class="fld full"><label for="d-aciklama">Açıklama</label><textarea id="d-aciklama">${esc(v.aciklama||'')}</textarea></div>
+    <div class="fld full"><label for="d-foto">Tespit fotoğrafları</label><div class="drop" data-for="d-foto"><input type="file" id="d-foto" accept="image/*" multiple><div class="thumbs"></div><span class="hint">Uygunsuzluğun fotoğrafı</span></div></div>
+    <div class="fld full"><label for="d-kanit">Kapanış kanıtı</label><div class="drop" data-for="d-kanit"><input type="file" id="d-kanit" accept="image/*" multiple><div class="thumbs"></div><span class="hint">Aksiyon sonrası fotoğraf / doküman görüntüsü</span></div></div>
+    <div class="actions"><button class="btn primary" type="submit" id="d-save"${!S.db||!S.canWrite?' disabled':''}>${d ? 'Güncelle' : 'Kaydet'}</button>${canDel ? '<button class="btn danger" type="button" id="d-del">Sil</button>' : ''}<span class="muted" id="d-msg"></span></div>
+  </form>`);
+  const f = o.querySelector('#f-dof');
+  pending['d-foto'] = []; pending['d-kanit'] = [];
+  bindDrop(f);
+  f.querySelector('.drop[data-for="d-foto"]')._existing = v.foto || []; f.querySelector('.drop[data-for="d-foto"]')._draw();
+  f.querySelector('.drop[data-for="d-kanit"]')._existing = v.kanitFoto || []; f.querySelector('.drop[data-for="d-kanit"]')._draw();
+  const upRisk = () => { const r = riskOf(f.querySelector('#d-o').value, f.querySelector('#d-s').value); f.querySelector('#d-risk').innerHTML = `<span class="risk ${r.k}"><span class="sc">${r.p||'—'}</span>${r.p ? r.t : ''}</span>`; };
+  const upNo = () => { if (!d) f.querySelector('#d-formno').value = nextFormNo(f.querySelector('#d-bildiren').value); };
+  f.querySelector('#d-o').addEventListener('change', upRisk); f.querySelector('#d-s').addEventListener('change', upRisk); f.querySelector('#d-bildiren').addEventListener('change', upNo);
+  f.querySelector('#d-durum').addEventListener('change', e => { if (e.target.value === 'Tamamlandı' && !f.querySelector('#d-kapanis').value) f.querySelector('#d-kapanis').value = ymd(new Date()); });
+  upRisk(); upNo();
+  const del = f.querySelector('#d-del');
+  if (del) del.addEventListener('click', async () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = 'Emin misiniz? Sil'; setTimeout(() => { delete del.dataset.sure; del.textContent = 'Sil'; }, 3500); return; } await S.db.doc('dof/' + d.id).delete(); o.remove(); toast('DÖF silindi'); });
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = f.querySelector('#d-msg'), g = s => f.querySelector(s).value;
+    if (!g('#d-tarih') || !g('#d-bildiren') || !g('#d-lok') || !g('#d-gozlem').trim()) { msg.textContent = 'Tarih, bildiren, lokasyon ve gözlem zorunlu.'; return; }
+    const btn = f.querySelector('#d-save'); btn.disabled = true;
+    try {
+      const foto = [...(v.foto||[]), ...await uploadAll('d-foto', msg)];
+      const kanitFoto = [...(v.kanitFoto||[]), ...await uploadAll('d-kanit', msg)];
+      const t = g('#d-tarih');
+      const rec = { tarih:t, yil:parseD(t).getFullYear(), formNo:g('#d-formno').trim() || nextFormNo(g('#d-bildiren')), bildiren:g('#d-bildiren'), lokasyon:g('#d-lok'), altYuklenici:g('#d-alt'), firma:g('#d-firma'),
+        bildirimTuru:g('#d-bild'), uygunsuzlukTuru:g('#d-uyg'), gozlem:g('#d-gozlem').trim(), olasilik:Number(g('#d-o'))||null, siddet:Number(g('#d-s'))||null,
+        aksiyon:g('#d-aksiyon').trim(), sorumlu:g('#d-sorumlu').trim(), hedefTarih:g('#d-hedef'), durum:g('#d-durum'), kapanisTarih:g('#d-kapanis'), aciklama:g('#d-aciklama').trim(),
+        foto, kanitFoto, guncelleyen:S.meId, guncelleme:new Date().toISOString() };
+      msg.textContent = 'Kaydediliyor…';
+      if (d) await S.db.doc('dof/' + d.id).update(rec);
+      else await S.db.collection('dof').doc().set({ ...rec, olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:rec.guncelleme, kaynak:'uygulama' });
+      o.remove(); toast(d ? 'DÖF güncellendi' : 'DÖF kaydedildi');
+    } catch (err) { msg.textContent = err.message || ('Kaydedilemedi: ' + (err.code||'')); btn.disabled = false; }
+  });
+}
+
+/* ---------- KAZA ---------- */
+function rKaza(){
+  $('#kaza-new').disabled = $('#rk-new').disabled = !S.db || !S.canWrite;
+  const y = S.kazalar.filter(k => k.yil === S.yil), kz = y.filter(isKaza);
+  const K = [[kz.length, `${S.yil} kaza`],[y.filter(isRK).length,'Ramak kala'],[kz.filter(yaralanmali).length,'Yaralanmalı'],[kz.reduce((s,k)=>s+(Number(k.kayipGun)||0),0),'Kayıp gün'],[kz.filter(olumlu).length,'Ölümlü', true],[y.filter(k=>tru(k.aksiyonDurumu)!=='TAMAMLANDI').length,'Aksiyonu açık']];
+  $('#kaza-kpis').innerHTML = K.map(([v,l,al]) => `<div class="kpi${al && v ? ' alert' : ''}"><div class="v num">${v}</div><div class="l">${l}</div></div>`).join('');
+  const kf = S.kfilt || ''; document.querySelectorAll('[data-kfilt]').forEach(b => b.setAttribute('aria-selected', b.dataset.kfilt === kf));
+  const list = S.kazalar.filter(k => !kf || k.olayTipi === kf).sort((a,b) => b.tarih.localeCompare(a.tarih));
+  const sp = k => isRK(k) ? 'info' : k.sinif === 'Minör' ? 'warn' : 'crit';
+  $('#kaza-table').innerHTML = `<thead><tr><th>Tarih</th><th>Tip</th><th>Sınıf</th><th>Tür</th><th>Lokasyon</th><th>Alt yüklenici</th><th>Saat</th><th>Özet</th><th class="n">Kayıp gün</th><th>Aksiyon</th><th class="n">Foto</th></tr></thead><tbody>` +
+    (list.length ? list.map(k => `<tr class="click" data-kaza="${esc(k.id)}"><td class="mono">${trD(k.tarih)}</td><td><span class="pill ${sp(k)}">${esc(k.olayTipi)}</span></td><td>${esc(k.sinif || '—')}</td><td>${esc(k.tur)}</td><td>${esc(k.lokasyon||'')}</td><td>${esc(k.altYuklenici||'')}</td><td class="mono">${esc(k.saat||'')}</td><td><div class="clamp">${esc(k.aciklama)}</div></td><td class="n">${isKaza(k) ? esc(Number(k.kayipGun)||0) : '—'}</td><td>${esc(k.aksiyonDurumu||'')}</td><td class="n">${(k.foto||[]).length}</td></tr>`).join('')
+    : `<tr><td colspan="11"><div class="empty" style="border:0">${S.kazalar.length ? 'Bu tipte kayıt yok.' : 'Kayıtlı kaza veya ramak kala yok.'}</div></td></tr>`) + '</tbody>';
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-kfilt]'); if (b) { S.kfilt = b.dataset.kfilt; render(); } });
+$('#rk-new').addEventListener('click', () => openKaza(null, 'Ramak Kala'));
+$('#kaza-new').addEventListener('click', () => openKaza(null, 'Kaza'));
+document.addEventListener('click', e => { const r = e.target.closest('[data-kaza]'); if (r) openKaza(r.dataset.kaza); });
+function openKaza(id, tip){
+  const k = id ? S.kazalar.find(x => x.id === id) : null; if (id && !k) return;
+  const v = k || { tarih:ymd(today), proje:'MTX', olayTipi:tip || 'Kaza', sinif:'Minör', sonuc:'Hafif Yaralanma', uzuv:'N/A', kayipGun:0, aksiyonDurumu:'DEVAM EDİYOR', isveren:'MİKROLİNK' };
+  const canDel = k && (S.isAdmin || k.olusturan === S.meId || (k.olusturanEmail && k.olusturanEmail === AUTH.me?.email));
+  const o = sheet(`<header><h2>${k ? (isRK(k) ? 'Ramak kala kaydı' : 'Kaza kaydı') : (v.olayTipi === 'Ramak Kala' ? 'Ramak kala bildir' : 'Kaza bildir')}</h2><button class="btn sm" data-close>Kapat</button></header>
+  <form class="f" id="f-kaza" novalidate>
+    <div class="fld full"><label>Olay tipi <span class="req">*</span></label><div class="seg" role="radiogroup" id="k-tip">${['Kaza','Ramak Kala'].map(t => `<button type="button" role="radio" data-ktip="${t}" aria-selected="${v.olayTipi === t}">${t === 'Kaza' ? 'Kaza' : 'Ramak kala'}</button>`).join('')}</div><span class="hint" id="k-tip-hint"></span></div>
+    <div class="fld"><label for="k-tarih">Tarih <span class="req">*</span></label><input type="date" id="k-tarih" value="${esc(v.tarih)}"></div>
+    <div class="fld"><label for="k-saat">Saat aralığı</label><select id="k-saat">${opts(KZ.saat, v.saat, '—')}</select></div>
+    <div class="fld"><label for="k-bolge">Bölge</label><select id="k-bolge">${opts(uniq([...KZ.bolge, v.bolge]), v.bolge, '—')}</select></div>
+    <div class="fld"><label for="k-lok">Lokasyon / saha</label><select id="k-lok">${opts(S.cfg.lokasyonlar, v.lokasyon, '—')}</select></div>
+    <div class="fld"><label for="k-proje">Proje</label><input id="k-proje" value="${esc(v.proje||'')}"></div>
+    <div class="fld kz-only"><label for="k-sinif">Kaza sınıfı <span class="req">*</span></label><select id="k-sinif">${opts(KZ.sinif, v.sinif || 'Minör')}</select></div>
+    <div class="fld"><label for="k-tur">Kaza / olay türü <span class="req">*</span></label><select id="k-tur">${opts(uniq([...KZ.tur, v.tur]), v.tur, 'Seçin')}</select></div>
+    <div class="fld kz-only"><label for="k-sonuc">Sonuç</label><select id="k-sonuc">${opts(uniq([...KZ.sonuc, v.sonuc]), v.sonuc)}</select></div>
+    <div class="fld kz-only"><label for="k-uzuv">Yaralanan uzuv</label><select id="k-uzuv">${opts(uniq([...KZ.uzuv, v.uzuv]), v.uzuv)}</select></div>
+    <div class="fld kz-only"><label for="k-yar">Yaralanma türü</label><input id="k-yar" value="${esc(v.yaralanmaTuru||'')}" placeholder="Ezilme, kırık, kesik…"></div>
+    <div class="fld kz-only"><label for="k-kayip">Kayıp gün</label><input type="number" min="0" id="k-kayip" value="${esc(v.kayipGun ?? 0)}"></div>
+    <div class="fld"><label for="k-sup">Sorumlu süpervizör</label><input id="k-sup" value="${esc(v.supervizor||'')}"></div>
+    <div class="fld"><label for="k-isv">İşveren</label><input id="k-isv" value="${esc(v.isveren||'')}"></div>
+    <div class="fld"><label for="k-alt">Alt yüklenici</label><select id="k-alt">${opts(uniq([...S.cfg.altyukleniciler, v.altYuklenici]), v.altYuklenici, '—')}</select></div>
+    <div class="fld full"><label for="k-acik">Olay açıklaması <span class="req">*</span></label><textarea id="k-acik" rows="5">${esc(v.aciklama||'')}</textarea></div>
+    <div class="fld"><label for="k-kok">Kök neden</label><input id="k-kok" value="${esc(v.kokNeden||'')}"></div>
+    <div class="fld"><label for="k-aks">Aksiyon durumu</label><select id="k-aks">${opts(['DEVAM EDİYOR','TAMAMLANDI'], tru(v.aksiyonDurumu))}</select></div>
+    <div class="fld full"><label for="k-foto">Olay yeri fotoğrafları</label><div class="drop" data-for="k-foto"><input type="file" id="k-foto" accept="image/*" multiple><div class="thumbs"></div><span class="hint">Olay yeri, ekipman, tutanak görüntüsü</span></div></div>
+    <div class="actions"><button class="btn primary" type="submit" id="k-save"${!S.db||!S.canWrite?' disabled':''}>${k?'Güncelle':'Kaydet'}</button>${canDel?'<button class="btn danger" type="button" id="k-del">Sil</button>':''}<span class="muted" id="k-msg"></span></div>
+  </form>`);
+  const f = o.querySelector('#f-kaza'); pending['k-foto'] = []; bindDrop(f);
+  let ktip = v.olayTipi || 'Kaza';
+  const setTip = t => { ktip = t; f.querySelectorAll('[data-ktip]').forEach(b => b.setAttribute('aria-selected', b.dataset.ktip === t)); f.querySelectorAll('.kz-only').forEach(x => x.hidden = t !== 'Kaza'); f.querySelector('#k-tip-hint').textContent = t === 'Kaza' ? 'Yaralanma, kayıp gün veya maddi hasarla sonuçlanan olay' : 'Kazaya dönüşmeden atlatılan olay; yaralanma alanları sorulmaz'; o.querySelector('.sheet h2').textContent = k ? (t === 'Kaza' ? 'Kaza kaydı' : 'Ramak kala kaydı') : (t === 'Kaza' ? 'Kaza bildir' : 'Ramak kala bildir'); };
+  f.querySelectorAll('[data-ktip]').forEach(b => b.addEventListener('click', () => setTip(b.dataset.ktip))); setTip(ktip);
+  const dz = f.querySelector('.drop'); dz._existing = v.foto || []; dz._draw();
+  const del = f.querySelector('#k-del');
+  if (del) del.addEventListener('click', async () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = 'Emin misiniz? Sil'; setTimeout(() => { delete del.dataset.sure; del.textContent = 'Sil'; }, 3500); return; } await S.db.doc('kazalar/' + k.id).delete(); o.remove(); toast('Kayıt silindi'); });
+  f.addEventListener('submit', async e => {
+    e.preventDefault(); const msg = f.querySelector('#k-msg'), g = s => f.querySelector(s).value;
+    if (!g('#k-tarih') || !g('#k-tur') || !g('#k-acik').trim()) { msg.textContent = 'Tarih, tür ve açıklama zorunlu.'; return; }
+    const btn = f.querySelector('#k-save'); btn.disabled = true;
+    try {
+      const foto = [...(v.foto||[]), ...await uploadAll('k-foto', msg)];
+      const t = g('#k-tarih');
+      const rec = { tarih:t, yil:parseD(t).getFullYear(), saat:g('#k-saat'), bolge:g('#k-bolge'), lokasyon:g('#k-lok'), altYuklenici:g('#k-alt'), proje:g('#k-proje').trim(), olayTipi:ktip, sinif: ktip === 'Kaza' ? g('#k-sinif') : '', tur:g('#k-tur'), sonuc: ktip === 'Kaza' ? g('#k-sonuc') : 'NA', uzuv: ktip === 'Kaza' ? g('#k-uzuv') : 'N/A', yaralanmaTuru: ktip === 'Kaza' ? g('#k-yar').trim() : '', kayipGun: ktip === 'Kaza' ? (Number(g('#k-kayip'))||0) : 0, supervizor:tru(g('#k-sup')), isveren:tru(g('#k-isv')), aciklama:g('#k-acik').trim(), kokNeden:g('#k-kok').trim(), aksiyonDurumu:g('#k-aks'), foto, guncelleyen:S.meId, guncelleme:new Date().toISOString() };
+      msg.textContent = 'Kaydediliyor…';
+      if (k) await S.db.doc('kazalar/' + k.id).update(rec); else await S.db.collection('kazalar').doc().set({ ...rec, olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:rec.guncelleme, kaynak:'uygulama' });
+      o.remove(); toast(ktip === 'Kaza' ? 'Kaza kaydedildi' : 'Ramak kala kaydedildi');
+    } catch (err) { msg.textContent = err.message || ('Kaydedilemedi: ' + (err.code||'')); btn.disabled = false; }
+  });
+}
+
+/* ---------- KAYITLAR ---------- */
+/* Rapordaki tek kaynak: tarih aralığı + filtreler + arama uygulanmış aktivite listesi (eskiden yeniye) */
+function kayitList(){
+  const fv = {}; document.querySelectorAll('#k-filters select').forEach(x => { if (x.value) fv[x.dataset.key] = x.value; });
+  const q = tru($('#k-q').value), cols = activeFields().filter(f => f.tip !== 'foto');
+  const list = acts().filter(a => inRange(a.tarih) && Object.entries(fv).every(([k, v]) => a[k] === v) && (!q || tru(cols.map(f => a[f.key] ?? '').join(' ')).includes(q)))
+    .sort((a,b) => (a.tarih + (a.olusturma||'')).localeCompare(b.tarih + (b.olusturma||'')));
+  const desc = [...Object.entries(fv).map(([k, v]) => `${fld(k)?.ad || k}: ${v}`), ...(q ? [`Arama: "${$('#k-q').value.trim()}"`] : [])];
+  return { list, desc };
+}
+function uzmanRows(list){
+  const cols = [...GROUPS.map(g => g[0]), 'Diğer'];
+  const people = uniq([...S.cfg.uzmanlar, ...list.map(a => a.raporlayan)]);
+  const rows = people.map(p => { const mine = list.filter(a => a.raporlayan === p); return [p, ...cols.map(g => mine.filter(a => groupOf(a.aktivite) === g).length), mine.length]; }).filter(r => r[r.length-1] > 0 || S.cfg.uzmanlar.includes(r[0]));
+  const tot = ['Toplam', ...cols.map((_, i) => rows.reduce((s, r) => s + r[i+1], 0)), list.length];
+  return { head:['Uzman', ...cols, 'Toplam'], rows, tot };
+}
+function lokRows(list){
+  const allSaha = acts().filter(a => a.aktivite === 'SAHA DENETİMİ' && a.lokasyon && a.tarih <= ymd(new Date()));
+  const inList = list.filter(a => a.aktivite === 'SAHA DENETİMİ' && a.lokasyon);
+  const rows = uniq([...S.cfg.lokasyonlar.filter(l => l !== 'Diğer'), ...inList.map(a => a.lokasyon)]).map(l => { const last = allSaha.filter(a => a.lokasyon === l).map(a => a.tarih).sort().pop(); return { l, n:inList.filter(a => a.lokasyon === l).length, last, ago: last ? daysSince(last) : null }; });
+  return rows.sort((a,b) => (b.ago ?? 9999) - (a.ago ?? 9999));
+}
+function rKayit(){
+  const all = acts();
+  const lf = activeFields().filter(f => f.tip === 'liste');
+  const box = $('#k-filters'); const cur = {}; box.querySelectorAll('select').forEach(x => cur[x.dataset.key] = x.value);
+  const sig = JSON.stringify(lf.map(f => [f.key, f.ad]));
+  if (box._sig !== sig) { box.innerHTML = lf.map(f => `<select class="btn sm" data-key="${esc(f.key)}" aria-label="${esc(f.ad)}"></select>`).join(''); box._sig = sig; }
+  box.querySelectorAll('select').forEach(x => { const f = lf.find(y => y.key === x.dataset.key); const vals = uniq([...(f.secenekler || []), ...all.map(a => a[f.key]).filter(Boolean)]); x.innerHTML = opts(vals, cur[f.key] || '', `Tümü · ${f.ad}`); });
+  const cols = activeFields().filter(f => f.tip !== 'foto');
+  const list = kayitList().list.slice().reverse();
+  $('#k-count').textContent = `${list.length} kayıt`;
+  const cell = (f, a) => { const v = a[f.key]; if (f.key === 'sonuc') return `<td>${sonucPill(v)}</td>`; if (f.tip === 'sayi') return `<td class="n">${esc(v ?? '')}</td>`; if (f.tip === 'uzun') return `<td><div class="clamp">${esc(v || '')}</div></td>`; return `<td>${esc(v || '')}</td>`; };
+  const n = cols.length + 4, shown = list.slice(0, 500);
+  $('#k-table').innerHTML = `<thead><tr><th>Tarih</th><th class="n">Hafta</th>${cols.map(f => `<th${f.tip === 'sayi' ? ' class="n"' : ''}>${esc(f.ad)}</th>`).join('')}<th class="n">Foto</th><th></th></tr></thead><tbody>` +
+    (shown.length ? shown.map(a => `<tr><td class="mono">${trD(a.tarih)}</td><td class="n">${esc(a.hafta ?? '')}</td>${cols.map(f => cell(f, a)).join('')}<td class="n">${photoCell(a.foto, a)}</td><td>${(S.isAdmin || (a.olusturan && a.olusturan === S.meId) || (a.olusturanEmail && a.olusturanEmail === AUTH.me?.email)) ? `<button class="btn sm danger" data-delakt="${esc(a.id)}">Sil</button>` : ''}</td></tr>`).join('')
+    : `<tr><td colspan="${n}"><div class="empty" style="border:0">${all.length ? 'Filtreye uyan kayıt yok.' : 'Henüz kayıt yok. “Aktivite” sekmesinden ilk kaydı ekleyin ya da Ayarlar’dan Excel’i içe aktarın.'}</div></td></tr>`) +
+    (list.length > 500 ? `<tr><td colspan="${n}" class="muted">İlk 500 kayıt gösteriliyor; tamamı için "Excel ve özetler" bölümünden raporu indirin.</td></tr>` : '') + '</tbody>';
+}
+$('#k-filters').addEventListener('change', render);
+$('#k-q').addEventListener('input', render);
+document.addEventListener('click', async e => { const b = e.target.closest('[data-delakt]'); if (!b) return; if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc('aktiviteler/' + b.dataset.delakt).delete(); toast('Kayıt silindi'); } catch (err) { toast('Silinemedi: ' + (err.code||'')); } });
+
+/* ---------- FOTOĞRAFLAR ---------- */
+/* Fotoğraf klasörleri: her klasör = denetim tarihi · yapan kişi · lokasyon · alt yüklenici */
+S.phRange = S.phRange || presetRange('buhafta');
+const hesapAd = email => Object.values(AUTH.hesaplar).find(h => h.email === email)?.ad || '';
+const safeName = t => String(t).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+function photoFolders(){
+  const { from, to } = S.phRange, inR = t => !!t && t >= from && t <= to, F = {};
+  const put = (tarih, kisi, lok, alt, items, tur) => { if (!items.length) return;
+    const parts = [trD(tarih), kisi || 'Belirtilmemiş', lok || 'Lokasyon yok', alt || 'Alt yüklenici yok'];
+    const key = [tarih, tru(kisi), lok, alt].join('|');
+    const f = F[key] || (F[key] = { key, tarih, kisi:kisi || 'Belirtilmemiş', lok:lok || 'Lokasyon yok', alt:alt || 'Alt yüklenici yok', name:parts.join(' · '), items:[], turler:new Set() });
+    f.turler.add(tur); items.forEach(x => f.items.push(x)); };
+  acts().filter(a => inR(a.tarih)).forEach(a => put(a.tarih, a.raporlayan, a.lokasyon, a.altYuklenici, (a.foto||[]).map(id => ({ id, tur:a.aktivite, cap:`${a.aktivite}${a.aciklama ? ' · ' + a.aciklama : ''}` })), a.aktivite));
+  S.dofs.filter(d => inR(d.tarih)).forEach(d => put(d.tarih, d.bildiren, d.lokasyon, d.altYuklenici, [...(d.foto||[]).map(id => ({ id, tur:`DÖF ${d.formNo||''}`.trim(), cap:`DÖF ${d.formNo||''} · ${d.gozlem||''}` })), ...(d.kanitFoto||[]).map(id => ({ id, tur:`DÖF kanıt ${d.formNo||''}`.trim(), cap:`DÖF ${d.formNo||''} kapanış kanıtı` }))], 'DÖF'));
+  S.kazalar.filter(k => inR(k.tarih)).forEach(k => put(k.tarih, tru(hesapAd(k.olusturanEmail)) || k.supervizor, k.lokasyon, k.altYuklenici, (k.foto||[]).map(id => ({ id, tur:k.olayTipi, cap:`${k.olayTipi} · ${k.tur || ''}` })), k.olayTipi));
+  const q = tru($('#ph-q').value);
+  return Object.values(F).filter(f => !q || tru(f.name).includes(q)).sort((a,b) => b.tarih.localeCompare(a.tarih) || a.name.localeCompare(b.name, 'tr'));
+}
+const photoFile = (f, x, i) => safeName(`${f.tarih}_${x.tur}_${i+1}`).replace(/ /g, '-') + '.jpg';
+const FOLDER_SVG = '<svg width="34" height="28" viewBox="0 0 34 28" aria-hidden="true"><path d="M2 4a2 2 0 0 1 2-2h8l3 3h15a2 2 0 0 1 2 2v17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z" fill="var(--accent)" opacity=".16"/><path d="M2 4a2 2 0 0 1 2-2h8l3 3h15a2 2 0 0 1 2 2v17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>';
+function rFoto(){
+  if (document.activeElement?.id !== 'ph-from') $('#ph-from').value = S.phRange.from;
+  if (document.activeElement?.id !== 'ph-to') $('#ph-to').value = S.phRange.to;
+  const folders = photoFolders(), total = folders.reduce((s,f) => s + f.items.length, 0);
+  const open = S.phOpen && folders.find(f => f.key === S.phOpen);
+  if (!open) S.phOpen = null;
+  $('#ph-zip').disabled = !total;
+  $('#ph-zip').textContent = open ? 'Klasörü ZIP indir' : 'Tümünü ZIP indir';
+  $('#ph-path').innerHTML = open
+    ? `<button class="btn sm" data-phback>‹ Klasörler</button><span class="muted">/</span><b>${esc(open.name)}</b><span class="muted">· ${open.items.length} fotoğraf</span>`
+    : `<b>Klasörler</b><span class="muted">· ${trD(S.phRange.from)} – ${trD(S.phRange.to)} · ${folders.length} klasör · ${total} fotoğraf</span>`;
+  if (open) {
+    $('#ph-body').innerHTML = `<div class="panel"><div class="gallery">${open.items.map((x,i) => `<figure><img loading="lazy" src="${blobUrl(x.id)}" alt="${esc(x.tur)}" data-zoom="${esc(x.id)}" data-cap="${esc(open.name + ' · ' + x.cap)}" data-fname="${esc(photoFile(open, x, i))}"><figcaption>${esc(x.tur)}</figcaption></figure>`).join('')}</div></div>`;
+    return;
+  }
+  $('#ph-body').innerHTML = folders.length ? `<div class="folders">${folders.map(f => `<button type="button" class="fcard" data-phopen="${esc(f.key)}">
+      <span class="fhead">${FOLDER_SVG}<span class="fcount">${f.items.length}</span></span>
+      <span class="fname"><b>${esc(trD(f.tarih))}</b><span>${esc(f.kisi)}</span><span class="muted">${esc(f.lok)} · ${esc(f.alt)}</span></span>
+      <span class="fthumbs">${f.items.slice(0,3).map(x => `<img loading="lazy" src="${blobUrl(x.id)}" alt="">`).join('')}</span>
+      <span class="ftags muted">${esc([...f.turler].join(', '))}</span></button>`).join('')}</div>`
+    : `<div class="empty">Bu aralıkta fotoğraflı kayıt yok. Aktivite, DÖF veya kaza kaydına eklenen fotoğraflar burada "tarih · kişi · lokasyon · alt yüklenici" klasörlerinde toplanır.</div>`;
+}
+['#ph-from','#ph-to'].forEach(sel => $(sel).addEventListener('change', () => { let f = $('#ph-from').value, t = $('#ph-to').value; if (!f || !t) return; if (f > t) [f, t] = [t, f]; S.phRange = { from:f, to:t }; S.phOpen = null; render(); }));
+$('#ph-q').addEventListener('input', render);
+document.addEventListener('click', e => { const o = e.target.closest('[data-phopen]'); if (o) { S.phOpen = o.dataset.phopen; render(); window.scrollTo(0, 0); } if (e.target.closest('[data-phback]')) { S.phOpen = null; render(); } });
+$('#ph-zip').addEventListener('click', async () => {
+  const all = photoFolders(), folders = S.phOpen ? all.filter(f => f.key === S.phOpen) : all, btn = $('#ph-zip');
+  if (!window.JSZip) { toast('ZIP kütüphanesi yüklenemedi'); return; }
+  const n = folders.reduce((s,f) => s + f.items.length, 0); btn.disabled = true; const zip = new JSZip(); let ok = 0, k = 0;
+  for (const f of folders) { const dir = zip.folder(safeName(f.name.replace(/ · /g, ' - '))); for (const [i, x] of f.items.entries()) { btn.textContent = `Hazırlanıyor ${++k}/${n}`; try { const b = await (await fetch(blobUrl(x.id))).blob(); dir.file(photoFile(f, x, i), b); ok++; } catch {} } }
+  const name = folders.length === 1 ? safeName(folders[0].name.replace(/ · /g, ' - ')) : `SiteEye_FOTO_${S.phRange.from.replace(/-/g,'')}-${S.phRange.to.replace(/-/g,'')}`;
+  if (ok) { const data = await zip.generateAsync({ type:'uint8array' }); await saveFile(`${name}.zip`, data); } else toast('Fotoğraflar alınamadı');
+  btn.disabled = false; render();
+});
+
+/* ---------- RAPOR ---------- */
+/* Tarih aralığı: hazır tuşlar (kayan pencere) veya iki tarih arası özel seçim */
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const addMonths = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; };
+const PRESET_LBL = { buhafta:'Bu hafta', sonhafta:'Son hafta', sonay:'Son ay', soncey:'Son çeyrek', sonyil:'Son yıl', ytd:'Yıl başından', ozel:'Özel aralık' };
+function presetRange(k){ const t = new Date(); t.setHours(12,0,0,0); const to = ymd(t);
+  const from = k === 'buhafta' ? ymd(weekStart(cw.y, cw.w)) : k === 'sonhafta' ? ymd(addDays(t, -6)) : k === 'sonay' ? ymd(addDays(addMonths(t, -1), 1)) : k === 'soncey' ? ymd(addDays(addMonths(t, -3), 1)) : k === 'sonyil' ? ymd(addDays(addMonths(t, -12), 1)) : `${t.getFullYear()}-01-01`;
+  return { from, to, preset:k }; }
+S.range = (() => { try { const r = JSON.parse(localStorage.getItem('isg.range') || 'null'); if (r && r.preset && r.preset !== 'ozel') return presetRange(r.preset); if (r && r.from && r.to) return r; } catch {} return presetRange('buhafta'); })();
+function setRange(r){ if (r.from > r.to) [r.from, r.to] = [r.to, r.from]; S.range = r; try { localStorage.setItem('isg.range', JSON.stringify(r)); } catch {} if (r.from.slice(0,4) < String(S.yil - 1)) toast(`Uygulamada ${S.yil - 1} ve ${S.yil} kayıtları yüklü; daha eski tarihler boş görünür.`); render(); }
+function rRange(){
+  if (document.activeElement?.id !== 'rg-from') $('#rg-from').value = S.range.from;
+  if (document.activeElement?.id !== 'rg-to') $('#rg-to').value = S.range.to;
+  const days = Math.round((parseD(S.range.to) - parseD(S.range.from)) / 864e5) + 1;
+  $('#rg-info').textContent = `${trD(S.range.from)} – ${trD(S.range.to)} · ${days} gün`;
+}
+['#rg-from','#rg-to'].forEach(sel => $(sel).addEventListener('change', () => { const f = $('#rg-from').value, t = $('#rg-to').value; if (f && t) setRange({ from:f, to:t, preset:'ozel' }); }));
+const inRange = s => !!s && s >= S.range.from && s <= S.range.to;
+function scope(){
+  const r = S.range;
+  return { label:`${trD(r.from)} – ${trD(r.to)}`, file: r.preset === 'buhafta' ? `${cw.w}.HAFTA` : `${r.from.replace(/-/g,'')}-${r.to.replace(/-/g,'')}`, act:a => inRange(a.tarih), date:inRange };
+}
+function perfRows(list){
+  const types = uniq(S.cfg.aktiviteler.filter(t => list.some(a => a.aktivite === t)).concat(list.map(a => a.aktivite)));
+  const multi = uniq(list.map(a => a.haftaYil)).length > 1;
+  const wk = a => (a.haftaYil || 0) * 100 + (a.hafta || 0);
+  const keys = uniq(list.map(a => `${wk(a)}|${a.raporlayan}`)).sort((a,b) => { const [wa,ra] = a.split('|'), [wb,rb] = b.split('|'); return (+wa - +wb) || ra.localeCompare(rb,'tr'); });
+  return { types, rows: keys.map(k => { const [w,r] = k.split('|'); const mine = list.filter(a => String(wk(a)) === w && a.raporlayan === r); const n = +w; return [multi ? `${Math.floor(n/100)}/${n%100}` : n % 100, r, ...types.map(t => mine.filter(a => a.aktivite === t).length), mine.length]; }) };
+}
+function altRows(list, dofs, kz){
+  const names = uniq([...S.cfg.altyukleniciler, ...list.map(a => a.altYuklenici), ...dofs.map(d => d.altYuklenici), ...kz.map(k => k.altYuklenici)]);
+  const row = x => [x || 'Belirtilmemiş', ...S.cfg.aktiviteler.map(t => list.filter(a => (a.altYuklenici||'') === x && a.aktivite === t).length), list.filter(a => (a.altYuklenici||'') === x).length, ...sonuclar().map(v => list.filter(a => (a.altYuklenici||'') === x && a.sonuc === v).length), dofs.filter(d => (d.altYuklenici||'') === x).length, dofs.filter(d => (d.altYuklenici||'') === x && d.durum === 'Devam Ediyor').length, kz.filter(k => (k.altYuklenici||'') === x).length];
+  const rows = names.map(row); const un = row(''); if (un.slice(1).some(v => v)) rows.push(un); return rows;
+}
+const altHead = () => ['Alt yüklenici', ...S.cfg.aktiviteler, 'Toplam aktivite', ...sonuclar(), 'DÖF', 'Açık DÖF', 'Kaza + ramak kala'];
+function kazaList(){
+  const fv = {}; document.querySelectorAll('#k-filters select').forEach(x => { if (x.value && ['lokasyon','altYuklenici'].includes(x.dataset.key)) fv[x.dataset.key] = x.value; });
+  return S.kazalar.filter(k => inRange(k.tarih) && Object.entries(fv).every(([key, v]) => k[key] === v)).sort((a,b) => a.tarih.localeCompare(b.tarih));
+}
+function kazaStats(kz){
+  const K = kz.filter(isKaza), sum = a => a.reduce((s,k) => s + (Number(k.kayipGun)||0), 0);
+  return [
+    ['Kaza', K.length], ['Ramak kala', kz.filter(isRK).length], ['Minör', K.filter(k => k.sinif === 'Minör').length], ['Majör', K.filter(k => k.sinif === 'Majör').length],
+    ['HiPo (yüksek potansiyelli)', K.filter(k => k.sinif === 'HiPo').length], ['Ölümlü', K.filter(olumlu).length], ['Yaralanmalı', K.filter(yaralanmali).length],
+    ['Kayıp gün', sum(K)], ['Kayıp günlü kaza', K.filter(k => (Number(k.kayipGun)||0) > 0).length], ['Kaza başına kayıp gün', K.length ? Math.round(sum(K) / K.length * 10) / 10 : 0],
+    ['Ramak kala / kaza oranı', K.length ? Math.round(kz.filter(isRK).length / K.length * 10) / 10 : '—'], ['Aksiyonu açık', kz.filter(k => tru(k.aksiyonDurumu) !== 'TAMAMLANDI').length]
+  ];
+}
+const KZ_HEAD = ['Kaza', 'Ramak kala', 'Yaralanmalı', 'Kayıp gün'];
+function kazaBreak(kz, keyFn){
+  const names = uniq(kz.map(k => keyFn(k) || 'Belirtilmemiş'));
+  return names.map(n => { const r = kz.filter(k => (keyFn(k) || 'Belirtilmemiş') === n); const K = r.filter(isKaza); return [n, K.length, r.filter(isRK).length, K.filter(yaralanmali).length, K.reduce((s,k) => s + (Number(k.kayipGun)||0), 0)]; })
+    .sort((a,b) => (b[1] + b[2]) - (a[1] + a[2]) || a[0].localeCompare(b[0], 'tr'));
+}
+const KZ_BREAKS = [['Olay türüne göre', 'Tür', k => k.tur], ['Lokasyona göre', 'Lokasyon', k => k.lokasyon], ['Alt yükleniciye göre', 'Alt yüklenici', k => k.altYuklenici], ['Saat aralığına göre', 'Saat', k => k.saat], ['Kaza sınıfına göre', 'Sınıf', k => isKaza(k) ? k.sinif : 'Ramak kala'], ['Kök nedene göre', 'Kök neden', k => k.kokNeden]];
+function cezaList(){
+  const fv = {}; document.querySelectorAll('#k-filters select').forEach(x => { if (x.value && ['lokasyon','altYuklenici'].includes(x.dataset.key)) fv[x.dataset.key] = x.value; });
+  return S.cezalar.filter(c => inRange(c.tarih) && (!fv.lokasyon || c.lokasyon === fv.lokasyon) && (!fv.altYuklenici || [c.altYuklenici, c.cezaKesilen, c.yansitma].includes(fv.altYuklenici))).sort((a,b) => a.tarih.localeCompare(b.tarih));
+}
+function cezaStats(cl){
+  const cz = cl, sum = (a, k) => a.reduce((s,c) => s + (Number(c[k]) || 0), 0);
+  return [['Kesilen ceza', cz.length], ['Ceza tutarı (₺)', sum(cz, 'tutar')], ['Yansıtılan tutar (₺)', sum(cz, 'yansitmaTutar')], ['Mikrolink\'e kalan (₺)', sum(cz, 'tutar') - sum(cz, 'yansitmaTutar')], ['Ortalama ceza (₺)', cz.length ? Math.round(sum(cz, 'tutar') / cz.length) : 0]];
+}
+const CZ_HEAD = ['Ceza adedi', 'Ceza tutarı (₺)', 'Yansıtılan (₺)', 'Mikrolink\'e kalan (₺)'];
+function cezaRow(name, r){ const t = r.reduce((s,c) => s + (Number(c.tutar) || 0), 0), y = r.reduce((s,c) => s + (Number(c.yansitmaTutar) || 0), 0); return [name, r.length, t, y, t - y]; }
+function cezaAylik(cl){
+  const rows = []; let d = new Date(+S.range.from.slice(0,4), +S.range.from.slice(5,7) - 1, 1), end = new Date(+S.range.to.slice(0,4), +S.range.to.slice(5,7) - 1, 1);
+  for (let i = 0; d <= end && i < 120; i++, d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) { const key = `${d.getFullYear()}-${pad(d.getMonth()+1)}`; rows.push(cezaRow(`${AYLAR[d.getMonth()]} ${d.getFullYear()}`, cl.filter(c => c.tarih.startsWith(key)))); }
+  rows.push(cezaRow('Toplam', cl)); return rows;
+}
+function cezaBreak(cl, fn){ const names = uniq(cl.map(c => fn(c) || 'Belirtilmemiş')); return names.map(n => cezaRow(n, cl.filter(c => (fn(c) || 'Belirtilmemiş') === n))).sort((a,b) => b[2] - a[2] || b[1] - a[1]); }
+const CZ_BREAKS = [['Cezayı kesene göre', 'Cezayı kesen', c => c.cezayiKesen], ['Ceza kesilen firmaya göre', 'Firma', c => c.cezaKesilen], ['Yansıtılan firmaya göre', 'Yansıtılan firma', c => c.yansitma || 'Yansıtılmadı'], ['Ceza maddesine göre', 'Madde', c => c.madde], ['Lokasyona göre', 'Lokasyon', c => c.lokasyon]];
+const czCell = (v, i) => i === 0 ? `<td>${esc(v)}</td>` : `<td class="n${v ? '' : ' zero'}">${esc(i >= 2 ? (v ? TL(v) : 0) : v)}</td>`;
+const czTable = (title, key, head, rows, foot) => `<div style="min-width:0"><div class="bar" style="margin-bottom:8px"><h3 class="grow" style="font-size:.95rem">${esc(title)}</h3><button class="btn sm" data-xl="${key}">Excel</button></div><div class="tablewrap lim"><table><thead><tr><th>${esc(head)}</th>${CZ_HEAD.map(x => `<th class="n">${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(czCell).join('')}</tr>`).join('')}</tbody>${foot ? `<tfoot><tr>${foot.map(czCell).join('')}</tr></tfoot>` : ''}</table></div></div>`;
+function rRapor(){
+  rRange(); rKayit();
+  const { list, desc } = kayitList(), sc = scope();
+  const lbl = sc.label + (desc.length ? ' · filtreli' : '');
+  const u = uzmanRows(list);
+  $('#r-uzman-sub').textContent = lbl;
+  $('#r-uzman').innerHTML = `<thead><tr>${u.head.map((h,i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>` + u.rows.map(r => `<tr>${r.map((v,i) => i ? `<td class="n${v ? '' : ' zero'}">${i === r.length-1 ? `<b>${v}</b>` : v}</td>` : `<td>${esc(v)}</td>`).join('')}</tr>`).join('') + `</tbody><tfoot><tr>${u.tot.map((v,i) => `<td${i ? ' class="n"' : ''}>${v}</td>`).join('')}</tr></tfoot>`;
+  const lk = lokRows(list), lmax = Math.max(1, ...lk.map(x => x.n));
+  $('#r-lok').innerHTML = lk.length ? lk.map(x => `<span>${esc(x.l)}</span><div class="track"><div class="fill" style="width:${x.n/lmax*100}%"></div></div><span class="meta">${x.n} · ${x.last ? `<span style="color:${x.ago>30?'var(--crit)':x.ago>14?'var(--warn)':'var(--muted)'}">${x.ago} gün önce</span>` : '<span style="color:var(--crit)">hiç</span>'}</span>`).join('') : '<div class="empty" style="grid-column:1/-1">Lokasyon tanımlı değil.</div>';
+  const { types, rows } = perfRows(list);
+  $('#r-prev-title').textContent = `İSG performans · ${lbl} · ${list.length} aktivite`;
+  $('#r-prev').innerHTML = rows.length ? `<thead><tr><th class="n">Hafta</th><th>Raporlayan</th>${types.map(t => `<th class="n">${esc(t)}</th>`).join('')}<th class="n">Toplam</th></tr></thead><tbody>${rows.map(r => `<tr>${r.map((v,i) => i===1 ? `<td>${esc(v)}</td>` : `<td class="n${v===0?' zero':''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>` : '<tbody><tr><td><div class="empty" style="border:0">Bu dönemde aktivite yok.</div></td></tr></tbody>';
+  rNum(list);
+  const kz = kazaList();
+  $('#r-kz-title').textContent = `Kaza ve ramak kala raporu · ${sc.label} · ${kz.length} kayıt`;
+  $('#r-kz-kpis').innerHTML = kazaStats(kz).map(([l, v]) => `<div class="kpi${(l === 'Ölümlü' || l === 'Majör') && v ? ' alert' : ''}"><div class="v num">${v}</div><div class="l">${esc(l)}</div></div>`).join('');
+  $('#r-kz-tables').innerHTML = kz.length ? KZ_BREAKS.map(([t, h, fn]) => { const rows = kazaBreak(kz, fn); return `<div style="min-width:0"><div class="bar" style="margin-bottom:8px"><h3 class="grow" style="font-size:.95rem">${t}</h3><button class="btn sm" data-xl="kzb-${KZ_BREAKS.findIndex(b => b[0] === t)}">Excel</button></div><div class="tablewrap lim"><table><thead><tr><th>${h}</th>${KZ_HEAD.map(x => `<th class="n">${x}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((v,i) => i ? `<td class="n${v ? '' : ' zero'}">${v}</td>` : `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`; }).join('') : '<div class="empty" style="grid-column:1/-1">Bu aralıkta kaza veya ramak kala kaydı yok.</div>';
+  const cl = cezaList();
+  $('#r-cz-title').textContent = `Ceza raporu · ${sc.label} · ${cl.length} ceza`;
+  $('#r-cz-kpis').innerHTML = cezaStats(cl).map(([l, v]) => `<div class="kpi${/tutar/.test(l) && v ? ' alert' : ''}"><div class="v num">${esc(/₺/.test(l) ? TL(v) : v)}</div><div class="l">${esc(l.replace(' (₺)', ''))}</div></div>`).join('');
+  const ay = cezaAylik(cl);
+  $('#r-cz-tables').innerHTML = cl.length ? czTable('Aylık ceza tablosu', 'czay', 'Ay', ay.slice(0, -1), ay[ay.length - 1]) + CZ_BREAKS.map(([t, h, fn], i) => czTable(t, 'czb-' + i, h, cezaBreak(cl, fn))).join('') : '<div class="empty" style="grid-column:1/-1">Bu aralıkta ceza kaydı yok.</div>';
+  $('#r-dl').disabled = !window.XLSX;
+}
+/* Sayısal alan özetleri: her sayı alanı kendi gruplama alanına göre toplanır */
+const numFields = () => activeFields().filter(f => f.tip === 'sayi');
+function numRows(list, f){
+  const g = f.rapor || 'aktivite', gad = F().find(x => x.key === g)?.ad || g, m = new Map();
+  list.forEach(a => { const v = Number(a[f.key]); if (a[f.key] == null || a[f.key] === '' || !Number.isFinite(v)) return; const k = String(a[g] || '(boş)'); const o = m.get(k) || [0, 0]; o[0]++; o[1] += v; m.set(k, o); });
+  const rows = [...m].map(([k, [n, t]]) => [k, n, t, Math.round(t / n * 10) / 10]).sort((a, b) => b[2] - a[2] || a[0].localeCompare(b[0], 'tr'));
+  const n = rows.reduce((s, r) => s + r[1], 0), t = rows.reduce((s, r) => s + r[2], 0);
+  return { head:[gad, 'Kayıt sayısı', 'Toplam ' + f.ad.toLocaleLowerCase('tr-TR'), 'Ortalama'], rows, tot:['Toplam', n, t, n ? Math.round(t / n * 10) / 10 : 0] };
+}
+function rNum(list){
+  const nf = numFields(), el = $('#r-num'); if (!el) return;
+  el.innerHTML = nf.length ? nf.map(f => { const r = numRows(list, f); const cell = (v, i) => i ? `<td class="n${v ? '' : ' zero'}">${esc(String(v).replace('.', ','))}</td>` : `<td>${esc(v)}</td>`;
+    return `<div style="min-width:0"><div class="bar" style="margin-bottom:8px"><h3 class="grow" style="font-size:.95rem">${esc(f.ad)} · ${esc(r.head[0])} bazında</h3><button class="btn sm" data-xl="num-${esc(f.key)}">Excel</button></div>${r.rows.length ? `<div class="tablewrap lim"><table><thead><tr>${r.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${r.rows.map(x => `<tr>${x.map(cell).join('')}</tr>`).join('')}</tbody><tfoot><tr>${r.tot.map(cell).join('')}</tr></tfoot></table></div>` : '<div class="empty">Bu aralıkta değer girilmemiş.</div>'}</div>`; }).join('')
+    : '<div class="empty" style="grid-column:1/-1">Aktivite formunda sayı türünde alan yok. Ayarlar → Aktivite formu bölümünden eklenebilir.</div>';
+}
+/* Rapordaki her tablo tek başına Excel olarak indirilebilir */
+const XD = s => parseD(s) || '';
+function cezaDetay(cl){ return [['AY','TARİH','LOKASYON','PROJE','TUTAR','CEZAYI KESEN','CEZA KESİLEN','YANSITMA','YANSITILAN TUTAR','CEZA MADDESİ','AÇIKLAMA','BELGE','BELGE SAYISI']].concat(cl.map(c => [AYLAR[(c.ay || 1) - 1]?.toLocaleUpperCase('tr-TR') || '', XD(c.tarih), c.lokasyon || '', c.proje || '', c.tutar ?? '', c.cezayiKesen || '', c.cezaKesilen || '', c.yansitma || '', c.yansitmaTutar ?? '', c.madde || '', c.aciklama || '', c.belgeNot || '', (c.belge || []).length + (bid(c.belgePdfId) ? 1 : 0)])); }
+const xSafe = aoa => aoa.map(r => r.map(v => v == null ? '' : (typeof v === 'number' || v instanceof Date) ? v : String(v)));
+function xlTable(key){
+  const { list } = kayitList(), kz = kazaList();
+  if (key === 'kayit') { const ecol = activeFields().filter(f => f.tip !== 'foto'); return ['Aktivite kayıtları', [['Tarih','AY','Hafta', ...ecol.map(f => f.ad), 'Fotoğraf Sayısı']].concat(list.map(a => [XD(a.tarih), a.ay, a.hafta, ...ecol.map(f => a[f.key] ?? ''), (a.foto||[]).length])), [11,5,6, ...ecol.map(f => f.tip === 'uzun' ? 60 : f.tip === 'sayi' ? 8 : 18), 8]]; }
+  if (key === 'uzman') { const u = uzmanRows(list); return ['Uzman performansı', [u.head, ...u.rows, u.tot], [26, ...u.head.slice(1).map(() => 12)]]; }
+  if (key === 'lok') return ['Lokasyon saha denetimleri', [['Lokasyon','Denetim sayısı (aralık)','Son denetim','Kaç gün önce']].concat(lokRows(list).map(x => [x.l, x.n, XD(x.last), x.ago ?? 'Hiç'])), [24, 22, 14, 14]];
+  if (key === 'isg') { const pr = perfRows(list); return ['İSG performans', [['Hafta','Raporlayan', ...pr.types, 'Toplam']].concat(pr.rows), [8, 24, ...pr.types.map(t => Math.max(8, Math.min(18, t.length))), 8]]; }
+  if (key.startsWith('num-')) { const f = numFields().find(x => x.key === key.slice(4)); if (!f) return ['Sayısal özet', [['Alan bulunamadı']], [20]]; const r = numRows(list, f); return [`${f.ad} özeti`, [r.head, ...r.rows, r.tot], [30, 12, 16, 10]]; }
+  if (key === 'kzstats') return ['Kaza göstergeleri', [['Gösterge','Değer'], ...kazaStats(kz)], [30, 10]];
+  const cl = cezaList(), CZH = CZ_HEAD;
+  if (key === 'czay') return ['Aylık ceza tablosu', [['Ay', ...CZH], ...cezaAylik(cl)], [18, 12, 16, 16, 18]];
+  if (key.startsWith('czb-')) { const [t, h, fn] = CZ_BREAKS[+key.slice(4)]; return [`Ceza - ${t}`, [[h, ...CZH], ...cezaBreak(cl, fn)], [30, 12, 16, 16, 18]]; }
+  if (key === 'czdetay') return ['Ceza detay', cezaDetay(cl), [10, 12, 14, 8, 12, 16, 16, 16, 16, 34, 34, 30, 10]];
+  if (key.startsWith('kzb-')) { const [t, h, fn] = KZ_BREAKS[+key.slice(4)]; return [`Kaza - ${t}`, [[h, ...KZ_HEAD], ...kazaBreak(kz, fn)], [30, 10, 12, 12, 10]]; }
+}
+document.addEventListener('click', async e => { const b = e.target.closest('[data-xl]'); if (!b) return;
+  if (!window.XLSX) return toast('Excel kütüphanesi yüklenemedi');
+  const [name, aoa0, widths] = xlTable(b.dataset.xl); const aoa = xSafe(aoa0);
+  const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates:true, dateNF:'dd"."mm"."yyyy' }); ws['!cols'] = widths.map(w => ({ wch:w }));
+  if (aoa.length > 1) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:aoa.length-1, c:aoa[0].length-1} }) };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, name.replace(/[\\/?*\[\]:]/g, '').slice(0, 31));
+  const fname = `SiteEye_${name.replace(/[^A-Za-z0-9ÇĞİÖŞÜçğıöşü]+/g, '_')}_${S.range.from.replace(/-/g,'')}-${S.range.to.replace(/-/g,'')}.xlsx`;
+  if (await saveFile(fname, new Uint8Array(XLSX.write(wb, { bookType:'xlsx', type:'array' })))) toast(`${name} indirildi`);
+});
+$('#r-dl').addEventListener('click', async () => {
+  const msg = $('#r-msg'); if (!window.XLSX) { msg.textContent = 'Excel kütüphanesi yüklenemedi.'; return; }
+  const sc = scope(), { list, desc } = kayitList();
+  const D = s => { const d = parseD(s); return d || ''; };
+  const dofs = S.dofs.filter(d => sc.date(d.tarih) || d.durum === 'Devam Ediyor').sort((a,b) => a.tarih.localeCompare(b.tarih));
+  const kz = kazaList();
+  const wb = XLSX.utils.book_new();
+  const add = (name, aoa, widths) => { aoa = xSafe(aoa); const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates:true, dateNF:'dd"."mm"."yyyy' }); ws['!cols'] = widths.map(w => ({ wch:w })); if (aoa.length > 1) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:aoa.length-1, c:aoa[0].length-1} }) }; XLSX.utils.book_append_sheet(wb, ws, name); };
+  const cnt = f => list.filter(f).length, sum = f => list.filter(f).reduce((s,a) => s + (Number(a.adet)||0), 0);
+  add('ÖZET', [['FAALİYET RAPORU', sc.label],['Filtre', desc.length ? desc.join(' · ') : 'Yok'],['Oluşturma', new Date()],[],['Gösterge','Değer'],
+    ['Toplam aktivite', list.length],['Saha denetimi', cnt(a => a.aktivite==='SAHA DENETİMİ')],['Diğer denetimler', cnt(a => /DENETİM/.test(a.aktivite) && a.aktivite!=='SAHA DENETİMİ')],
+    ['Eğitim', cnt(a => a.aktivite==='EĞİTİM')],['Toplantı', cnt(a => a.aktivite==='TOPLANTI')],['Raporlama', cnt(a => a.aktivite==='RAPORLAMA')],['Onaylanan personel (adet)', sum(a => a.aktivite==='PERSONEL ONAYI')],['Onaylanan çalışma (adet)', sum(a => a.aktivite==='ÇALIŞMA ONAYI')],
+    ['Yeni DÖF', S.dofs.filter(d => sc.date(d.tarih)).length],['Kapatılan DÖF', S.dofs.filter(d => sc.date(d.kapanisTarih) && d.durum==='Tamamlandı').length],['Açık DÖF (toplam)', S.dofs.filter(d => d.durum==='Devam Ediyor').length],
+    ['Kaza', kz.filter(isKaza).length],['Ramak kala', kz.filter(isRK).length],['Yaralanmalı kaza', kz.filter(yaralanmali).length],['Kayıp gün', kz.filter(isKaza).reduce((s,k) => s + (Number(k.kayipGun)||0), 0)],['Ölümlü', kz.filter(olumlu).length],['Tebrik', cnt(a => a.sonuc==='Tebrik')],['Uyarı', cnt(a => a.sonuc==='Uyarı')],['İhlal', cnt(a => a.sonuc==='İhlal')],['Fotoğraf', list.reduce((s,a) => s + (a.foto||[]).length, 0)], ...numFields().filter(f => f.key !== 'adet').map(f => ['Toplam ' + f.ad.toLocaleLowerCase('tr-TR'), list.reduce((s,a) => s + (Number(a[f.key])||0), 0)])], [32, 22]);
+  const ecol = activeFields().filter(f => f.tip !== 'foto');
+  add('AKTİVİTELER', [['Tarih','AY','Hafta', ...ecol.map(f => f.ad), 'Fotoğraf Sayısı','Kaynak']].concat(list.map(a => [D(a.tarih), a.ay, a.hafta, ...ecol.map(f => a[f.key] ?? ''), (a.foto||[]).length, a.kaynak||''])), [11,5,6, ...ecol.map(f => f.tip === 'uzun' ? 60 : f.tip === 'sayi' ? 8 : 18), 8, 10]);
+  const u = uzmanRows(list);
+  add('UZMAN PERFORMANSI', [u.head, ...u.rows, u.tot], [26, ...u.head.slice(1).map(() => 12)]);
+  const nsum = [['SAYISAL ALAN ÖZETLERİ', sc.label]]; numFields().forEach(f => { const r = numRows(list, f); nsum.push([], [`${f.ad} · ${r.head[0]} bazında`.toLocaleUpperCase('tr-TR')], r.head, ...r.rows, r.tot); });
+  add('SAYISAL ÖZET', nsum, [32, 12, 18, 10]);
+  const pr = perfRows(list);
+  add('İSG PERFORMANS', [['HAFTA','Raporlayan', ...pr.types, 'TOPLAM']].concat(pr.rows), [7, 24, ...pr.types.map(t => Math.max(8, Math.min(18, t.length))), 8]);
+  add('LOKASYON DENETİM', [['LOKASYON','DENETİM SAYISI (ARALIK)','SON DENETİM','KAÇ GÜN ÖNCE']].concat(lokRows(list).map(x => [x.l, x.n, D(x.last), x.ago ?? 'Hiç'])), [24, 22, 14, 14]);
+  add('DÖF', [['#','Tarih','Form No','Bildiren','Lokasyon','Alt Yüklenici','İletilen Firma & Departman','Bildirim Türü','Uygunsuzluk Türü','Gözlem','Olasılık (1-5)','Şiddet (1-5)','Risk Puanı','Risk Yorumu','Aksiyon','Aksiyon Sorumlusu','Hedef Tarih','Gerçekleşen Tarih','Bekleme Süresi','Durum','Açıklama','Fotoğraf','Kanıt Fotoğraf']].concat(dofs.map((d,i) => { const r = riskOf(d.olasilik, d.siddet); const end = d.kapanisTarih ? parseD(d.kapanisTarih) : new Date(); return [i+1, D(d.tarih), d.formNo||'', d.bildiren||'', d.lokasyon||'', d.altYuklenici||'', d.firma||'', d.bildirimTuru||'', d.uygunsuzlukTuru||'', d.gozlem||'', d.olasilik||'', d.siddet||'', r.p||'', RISK_TXT[r.t]||'', d.aksiyon||'', d.sorumlu||'', D(d.hedefTarih), D(d.kapanisTarih), d.tarih ? Math.max(0, Math.round((end - parseD(d.tarih))/864e5)) : '', d.durum||'', d.aciklama||'', (d.foto||[]).length, (d.kanitFoto||[]).length]; })), [5,11,9,20,18,16,18,20,22,60,8,8,8,34,44,22,11,11,8,13,40,8,8]);
+  add('KAZA TAKİP', [['S/N','Tarih','AY','BÖLGE','PROJE','LOKASYON','Saat','Olay Tipi','Kaza Sınıf','Kaza/Olay Türü','Kaza/Olay Sonuç','Yaralanan Uzuv','Yaralanma Türü','Kayıp Gün','Özet Kaza Açıklaması','Sorumlu Süpervizör','İşveren','Alt Yüklenici','KÖK NEDEN','AKSİYON DURUMU','Fotoğraf']].concat(kz.map((k,i) => [i+1, D(k.tarih), parseD(k.tarih)?.getMonth()+1, k.bolge||'', k.proje||'', k.lokasyon||'', k.saat||'', k.olayTipi||'', k.sinif||'', k.tur||'', k.sonuc||'', k.uzuv||'', k.yaralanmaTuru||'', k.kayipGun||0, k.aciklama||'', k.supervizor||'', k.isveren||'', k.altYuklenici||'', k.kokNeden||'', k.aksiyonDurumu||'', (k.foto||[]).length])), [5,11,5,12,8,18,13,11,11,24,18,16,16,8,70,20,14,16,30,16,8]);
+  const kzs = [['KAZA VE RAMAK KALA RAPORU', sc.label], [], ['Gösterge', 'Değer'], ...kazaStats(kz)];
+  KZ_BREAKS.forEach(([t, h, fn]) => { kzs.push([], [t.toLocaleUpperCase('tr-TR')], [h, ...KZ_HEAD], ...kazaBreak(kz, fn)); });
+  add('KAZA ÖZETİ', kzs, [30, 10, 12, 12, 10]);
+  const cl = cezaList();
+  add('CEZA TABLOSU', [['CEZA', sc.label], [], ['Gösterge', 'Değer'], ...cezaStats(cl), [], ['AYLIK'], ['Ay', ...CZ_HEAD], ...cezaAylik(cl)], [26, 12, 16, 16, 18]);
+  add('CEZA DETAY', cezaDetay(cl), [10, 12, 14, 8, 12, 16, 16, 16, 16, 34, 34, 30, 10]);
+  const out = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+  msg.textContent = '';
+  if (await saveFile(`FAALIYET_RAPORU_${sc.file}.xlsx`, new Uint8Array(out))) msg.textContent = `İndirildi: ${list.length} aktivite, ${dofs.length} DÖF, ${kz.length} kaza/olay.`;
+});
+
+/* ---------- AYARLAR + İÇE AKTARMA ---------- */
+async function saveCfg(patch){
+  const ref = S.db.doc('ayarlar/listeler');
+  try { await ref.update(patch); }
+  catch { const { aktiviteler, lokasyonlar, ...rest } = S.cfg; await ref.set({ ...rest, ...patch }); }
+}
+function rAyar(){
+  const f = $('#f-ayar');
+  rFields();
+  if (!f._init) { f._init = true; f.addEventListener('submit', async e => { e.preventDefault(); const firmalar = uniq($('#s-firma').value.split('\n').map(x => x.trim())); try { await saveCfg({ firmalar, guncelleme:new Date().toISOString() }); $('#s-msg').textContent = 'Kaydedildi.'; } catch (err) { $('#s-msg').textContent = 'Kaydedilemedi: ' + (err.code || ''); } }); }
+  if (document.activeElement?.closest('#f-ayar')) return;
+  $('#s-firma').value = S.cfg.firmalar.join('\n');
+}
+const CORE = ['aktivite','raporlayan'];
+async function saveFields(arr){ await S.db.doc('ayarlar/aktiviteFormu').set({ alanlar:arr, guncelleme:new Date().toISOString(), guncelleyen:AUTH.me?.email || '' }); }
+function rFields(){
+  const list = F();
+  const adOf = k => list.find(x => x.key === k)?.ad || k;
+  const gor = f => { let t = 'Her zaman'; if (f.kosul?.degerler?.length) t = `<span title="${esc(adOf(f.kosul.alan) + ': ' + f.kosul.degerler.join(', '))}">${esc(adOf(f.kosul.alan))} = ${f.kosul.degerler.length > 2 ? f.kosul.degerler.length + ' seçenek' : esc(f.kosul.degerler.join(' / '))}</span>`; if (f.tip === 'sayi') t += `<br><span class="muted" style="font-size:.78rem">Rapor: ${esc(adOf(f.rapor || 'aktivite'))} bazında</span>`; return t; };
+  $('#fa-table').innerHTML = `<thead><tr><th>Sıra</th><th>Alan</th><th>Tür</th><th>Seçenekler</th><th>Zorunlu</th><th>Görünürlük</th><th>Durum</th><th></th></tr></thead><tbody>
+    <tr><td class="muted">—</td><td><b>Tarih</b></td><td>Tarih</td><td>—</td><td>Evet</td><td>Her zaman</td><td><span class="pill">Sabit</span></td><td></td></tr>` +
+    list.map((f, i) => `<tr><td style="white-space:nowrap"><button class="btn sm" data-fup="${i}"${i === 0 ? ' disabled' : ''} aria-label="Yukarı taşı">↑</button> <button class="btn sm" data-fdown="${i}"${i === list.length - 1 ? ' disabled' : ''} aria-label="Aşağı taşı">↓</button></td>
+      <td><b>${esc(f.ad)}</b>${f.sistem ? '' : ' <span class="muted">(özel)</span>'}</td><td>${esc(TIP[f.tip] || f.tip)}</td><td>${f.tip === 'liste' ? (f.secenekler || []).length + ' seçenek' : '—'}</td><td>${f.zorunlu ? 'Evet' : '—'}</td><td>${gor(f)}</td>
+      <td><span class="pill ${f.aktif === false ? '' : 'ok'}">${f.aktif === false ? 'Gizli' : 'Açık'}</span></td>
+      <td style="white-space:nowrap"><button class="btn sm" data-fedit="${i}">Düzenle</button>${CORE.includes(f.key) ? '' : ` <button class="btn sm" data-ftog="${i}">${f.aktif === false ? 'Göster' : 'Gizle'}</button>`}${f.sistem ? '' : ` <button class="btn sm danger" data-fdel="${i}">Sil</button>`}</td></tr>`).join('') + '</tbody>';
+}
+document.addEventListener('click', async e => {
+  if (!S.isAdmin) return;
+  const b = e.target.closest('[data-fup],[data-fdown],[data-ftog],[data-fdel],[data-fedit],#fa-add'); if (!b) return;
+  if (b.id === 'fa-add') return openFieldEditor(null);
+  if (b.dataset.fedit != null) return openFieldEditor(+b.dataset.fedit);
+  const arr = F().map(x => ({ ...x }));
+  try {
+    if (b.dataset.fup != null) { const i = +b.dataset.fup; [arr[i-1], arr[i]] = [arr[i], arr[i-1]]; await saveFields(arr); }
+    else if (b.dataset.fdown != null) { const i = +b.dataset.fdown; [arr[i+1], arr[i]] = [arr[i], arr[i+1]]; await saveFields(arr); }
+    else if (b.dataset.ftog != null) { const i = +b.dataset.ftog; arr[i].aktif = arr[i].aktif === false; await saveFields(arr); toast(arr[i].aktif ? 'Alan formda gösteriliyor' : 'Alan formdan gizlendi'); }
+    else if (b.dataset.fdel != null) { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } const dk = arr[+b.dataset.fdel].key; arr.splice(+b.dataset.fdel, 1); let dep = 0; arr.forEach(x => { if (x.kosul?.alan === dk) { x.kosul = null; dep++; } if (x.rapor === dk) x.rapor = ''; }); await saveFields(arr); toast('Alan silindi; eski kayıtlardaki değerleri korunur' + (dep ? ` · ${dep} bağlı alan artık her zaman görünür` : '')); }
+  } catch (err) { toast(adminErr(err)); }
+});
+function openFieldEditor(i){
+  const isNew = i == null;
+  const f = isNew ? { key:'f_' + Math.random().toString(36).slice(2, 8), ad:'', tip:'liste', secenekler:[], zorunlu:false, aktif:true, sistem:false, kosul:null, yer:'' } : JSON.parse(JSON.stringify(F()[i]));
+  const all = F(), desc = new Set([f.key]); let grew = true;
+  while (grew) { grew = false; all.forEach(x => { if (x.kosul?.alan && desc.has(x.kosul.alan) && !desc.has(x.key)) { desc.add(x.key); grew = true; } }); }
+  const parents = all.filter(x => x.tip === 'liste' && !desc.has(x.key) && x.aktif !== false);
+  const curP = f.kosul?.alan && parents.some(x => x.key === f.kosul.alan) ? f.kosul.alan : (parents.some(x => x.key === 'aktivite') ? 'aktivite' : parents[0]?.key || '');
+  const groups = all.filter(x => x.tip === 'liste' && x.key !== f.key);
+  const tips = f.tip === 'foto' ? ['foto'] : ['liste','metin','sayi','uzun'];
+  const o = sheet(`<header><h2>${isNew ? 'Yeni alan' : 'Alanı düzenle'}</h2><button class="btn sm" data-close>Kapat</button></header>
+  <form class="f one" id="f-fld" novalidate>
+    <div class="fld"><label for="fe-ad">Alan adı</label><input id="fe-ad" value="${esc(f.ad)}" placeholder="ör. Vardiya"></div>
+    <div class="fld"><label for="fe-tip">Tür</label><select id="fe-tip"${f.sistem ? ' disabled' : ''}>${tips.map(t => `<option value="${t}"${t === f.tip ? ' selected' : ''}>${TIP[t]}</option>`).join('')}</select>${f.sistem ? '<span class="hint">Raporlarda kullanılan temel alan; türü değiştirilemez.</span>' : ''}</div>
+    <div class="fld" id="fe-sec-wrap"><label for="fe-sec">Seçenekler · her satıra bir seçenek</label><textarea id="fe-sec" rows="9">${esc((f.secenekler || []).join('\n'))}</textarea><span class="hint">Silinen seçenek yeni kayıtlarda seçilemez; eski kayıtlarda değeri korunur.${f.key === 'aktivite' ? ' Aktivite seçenekleri DÖF ve rapor tablolarında da kullanılır.' : ''}</span></div>
+    <div class="fld"><label for="fe-yer">Yardım metni · kutunun içinde görünür</label><input id="fe-yer" value="${esc(f.yer || '')}"></div>
+    <label class="check"><input type="checkbox" id="fe-zor"${f.zorunlu ? ' checked' : ''}> Zorunlu alan</label>
+    ${CORE.includes(f.key) ? '' : `<div class="fld"><label for="fe-gor">Görünürlük</label><select id="fe-gor"><option value="her">Her zaman göster</option><option value="sec"${f.kosul?.degerler?.length ? ' selected' : ''}>Koşula bağlı göster</option></select></div>
+      <div id="fe-kos" style="display:grid;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px">
+        <div class="fld"><label for="fe-kalan">Bağlı olduğu alan</label><select id="fe-kalan">${parents.map(x => `<option value="${esc(x.key)}"${x.key === curP ? ' selected' : ''}>${esc(x.ad)}</option>`).join('')}</select></div>
+        <span class="hint" id="fe-kos-hint"></span>
+        <div class="checks" id="fe-akts"></div>
+      </div>`}
+    <div class="fld" id="fe-rap-wrap"><label for="fe-rap">Raporda gruplama</label><select id="fe-rap">${groups.map(x => `<option value="${esc(x.key)}"${x.key === (f.rapor || 'aktivite') ? ' selected' : ''}>${esc(x.ad)} bazında</option>`).join('')}</select><span class="hint">Rapor sekmesindeki "Sayısal alan özetleri" tablosunda bu alanın toplamı ve ortalaması seçilen alana göre verilir.</span></div>
+    <div class="actions"><button class="btn primary" type="submit">Kaydet</button><span class="err" id="fe-msg"></span></div>
+  </form>`);
+  const fm = o.querySelector('#f-fld'), q = x => fm.querySelector(x);
+  const checks = () => { const ka = q('#fe-kalan'); if (!ka) return; const p = all.find(x => x.key === ka.value); const keep = p && p.key === f.kosul?.alan ? f.kosul.degerler : [];
+    q('#fe-kos-hint').textContent = p ? `"${p.ad}" alanında aşağıdakilerden biri seçildiğinde bu alan formda açılır.` : 'Bağlanabilecek liste alanı yok.';
+    q('#fe-akts').innerHTML = (p?.secenekler || []).map(a => `<label class="check"><input type="checkbox" value="${esc(a)}"${keep.includes(a) ? ' checked' : ''}> ${esc(a)}</label>`).join(''); };
+  const upd = () => { q('#fe-sec-wrap').hidden = q('#fe-tip').value !== 'liste'; q('#fe-rap-wrap').hidden = q('#fe-tip').value !== 'sayi'; const g = q('#fe-gor'); if (g) q('#fe-kos').style.display = g.value === 'sec' ? 'grid' : 'none'; };
+  q('#fe-tip').addEventListener('change', upd); q('#fe-gor')?.addEventListener('change', upd); q('#fe-kalan')?.addEventListener('change', checks); checks(); upd();
+  fm.addEventListener('submit', async e => { e.preventDefault(); const m = q('#fe-msg');
+    const ad = q('#fe-ad').value.trim(); if (!ad) return m.textContent = 'Alan adı girin.';
+    if (F().some((x, j) => j !== i && tru(x.ad) === tru(ad))) return m.textContent = 'Bu adla başka bir alan var.';
+    const tip = f.sistem ? f.tip : q('#fe-tip').value;
+    const sec = uniq(q('#fe-sec').value.split('\n').map(x => x.trim()));
+    if (tip === 'liste' && !sec.length) return m.textContent = 'Liste türü için en az bir seçenek girin.';
+    let kosul = null; const g = q('#fe-gor');
+    if (g && g.value === 'sec') { const alan = q('#fe-kalan')?.value; if (!alan) return m.textContent = 'Bağlanacak alanı seçin.'; const d = [...fm.querySelectorAll('#fe-akts input:checked')].map(x => x.value); if (!d.length) return m.textContent = 'Alanın açılacağı en az bir seçeneği işaretleyin.'; kosul = { alan, degerler:d }; }
+    const nf = { ...f, ad, tip, secenekler: tip === 'liste' ? sec : [], yer:q('#fe-yer').value.trim(), zorunlu:q('#fe-zor').checked, kosul, rapor: tip === 'sayi' ? (q('#fe-rap').value || 'aktivite') : '' };
+    const arr = F().map(x => ({ ...x })); if (isNew) arr.push(nf); else arr[i] = nf;
+    arr.forEach(x => { if (x.kosul?.alan === nf.key) { x.kosul = nf.tip === 'liste' ? { ...x.kosul, degerler:x.kosul.degerler.filter(v => sec.includes(v)) } : null; if (x.kosul && !x.kosul.degerler.length) x.kosul = null; } if (x.rapor === nf.key && nf.tip !== 'liste') x.rapor = ''; });
+    try { await saveFields(arr); o.remove(); toast(isNew ? 'Alan eklendi' : 'Alan güncellendi'); } catch (err) { m.textContent = adminErr(err); }
+  });
+}
+let IMP = null;
+$('#imp-file').addEventListener('change', async e => {
+  const file = e.target.files[0], msg = $('#imp-msg'); IMP = null; $('#imp-go').disabled = true; if (!file) return;
+  if (!window.XLSX) { msg.textContent = 'Excel kütüphanesi yüklenemedi.'; return; }
+  msg.textContent = 'Dosya okunuyor…';
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type:'array', sheets:['AKTİVİTELER','DÖF TÜM ZAMANLAR'] });
+    const rowsOf = name => { const ws = wb.Sheets[name]; if (!ws) return []; let maxR = 0; for (const k in ws) { if (k[0] === '!') continue; const c = ws[k]; if (c && c.v != null && c.v !== '') { const r = XLSX.utils.decode_cell(k).r; if (r > maxR) maxR = r; } } const ref = XLSX.utils.decode_range(ws['!ref']); ref.e.r = maxR; return XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null, range:ref }); };
+    const dOf = v => { if (typeof v === 'number') { const p = XLSX.SSF.parse_date_code(v); return p ? `${p.y}-${pad(p.m)}-${pad(p.d)}` : ''; } if (typeof v === 'string') { const m = v.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/); if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`; } return ''; };
+    const s = v => v == null ? '' : String(v).trim();
+    const seen = {}, A = [];
+    rowsOf('AKTİVİTELER').slice(1).forEach(r => {
+      const tarih = dOf(r[0]); if (!tarih) return;
+      const rec = { tarih, aktivite:tru(r[3]), raporlayan:tru(r[4]), lokasyon:tru(r[5]), personel:s(r[6]), plaka:tru(r[7]), adet: typeof r[8] === 'number' ? r[8] : null, aciklama:s(r[9]) };
+      const canon = [tarih, rec.aktivite, rec.raporlayan, rec.lokasyon, rec.personel, rec.plaka, rec.adet == null ? '' : String(rec.adet), rec.aciklama.replace(/\s+/g,'').slice(0,80)].join('|');
+      const n = seen[canon] || 0; seen[canon] = n + 1;
+      const d = parseD(tarih); if (d.getFullYear() !== S.yil) return;
+      const nr = normAkt(rec); if (!nr) return;
+      const iw = isoWeek(d);
+      A.push(['a-' + fnv(canon) + (n ? '-' + n : ''), { ...nr, lokasyon:normLok(nr.lokasyon), yil:d.getFullYear(), ay:d.getMonth()+1, donem:tarih.slice(0,7), hafta:iw.w, haftaYil:iw.y, foto:[], kaynak:'excel' }]);
+    });
+    const Dd = [];
+    rowsOf('DÖF TÜM ZAMANLAR').slice(1).forEach(r => {
+      const tarih = dOf(r[1]); if (!tarih) return;
+      const durum = s(r[18]), y = +tarih.slice(0,4);
+      if (y !== S.yil && durum !== 'Devam Ediyor') return;
+      const num = v => typeof v === 'number' ? v : null;
+      Dd.push(['d-' + fnv(s(r[2]) + '|' + tarih), { tarih, yil:y, formNo:s(r[2]), bildiren:tru(r[3]), lokasyon:normLok(r[4]), firma:s(r[5]), bildirimTuru:s(r[6]), uygunsuzlukTuru:s(r[7]), gozlem:s(r[8]), olasilik:num(r[9]), siddet:num(r[10]), aksiyon:s(r[13]), sorumlu:s(r[14]).replace(/\n+/g, ', '), hedefTarih:dOf(r[15]), kapanisTarih:dOf(r[16]), durum, aciklama:s(r[19]), foto:[], kanitFoto:[], kaynak:'excel' }]);
+    });
+    IMP = { A, Dd };
+    msg.textContent = `${S.yil} yılına ait ${A.length} aktivite ve ${Dd.length} DÖF bulundu.`;
+    $('#imp-go').disabled = !S.db || (!A.length && !Dd.length);
+  } catch (err) { msg.textContent = 'Dosya okunamadı: ' + (err.message || err); }
+});
+$('#imp-go').addEventListener('click', async () => {
+  if (!IMP || !S.db) return;
+  const btn = $('#imp-go'), msg = $('#imp-msg'), prog = $('#imp-prog'); btn.disabled = true; prog.hidden = false;
+  const existsA = new Map(acts().map(a => [a.id, a])), existsD = new Map(S.dofs.map(d => [d.id, d]));
+  const protectedRec = r => r && (r.kaynak !== 'excel' || (r.foto||[]).length || (r.kanitFoto||[]).length);
+  const jobs = [...IMP.A.filter(([id]) => !protectedRec(existsA.get(id))).map(([id, d]) => ['aktiviteler/' + id, d]), ...IMP.Dd.filter(([id]) => !protectedRec(existsD.get(id))).map(([id, d]) => ['dof/' + id, d])];
+  let done = 0, fail = 0, i = 0;
+  const worker = async () => { while (i < jobs.length) { const [p, d] = jobs[i++]; try { await S.db.doc(p).set(d); } catch (e) { if (e?.code === 'resource_exhausted' || e?.code === 'unavailable') { await new Promise(r => setTimeout(r, 1500 + Math.random()*1000)); try { await S.db.doc(p).set(d); } catch { fail++; } } else if (e?.code === 'quota_exceeded') { fail++; i = jobs.length; msg.textContent = 'Veritabanı kotası doldu: ' + (e.message||''); } else fail++; } done++; prog.firstElementChild.style.width = (done / jobs.length * 100) + '%'; if (done % 20 === 0) msg.textContent = `Aktarılıyor ${done}/${jobs.length}…`; } };
+  await Promise.all([worker(), worker(), worker()]);
+  msg.textContent = `Bitti: ${done - fail} kayıt aktarıldı${fail ? `, ${fail} kayıt aktarılamadı (tekrar deneyin)` : ''}.`;
+  btn.disabled = false;
+});
+
+/* ---------- bağlantı ---------- */
+function subscribe(){
+  S.unsub.forEach(u => u()); S.unsub = []; S.months = {};
+  const db = S.db, err = e => { if (e?.code === 'revoked') banner('Bu sayfaya erişiminiz değişti. Sayfayı yenileyin.', true); };
+  S.unsub.push(db.doc('ayarlar/listeler').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.cfg = { ...DEF, ...(d || {}) }; if (!Array.isArray(S.cfg.firmalar) || !S.cfg.firmalar.length) S.cfg.firmalar = DEF.firmalar; applyFields(); render(); }, err));
+  S.unsub.push(db.doc('ayarlar/aktiviteFormu').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.fields = Array.isArray(d?.alanlar) && d.alanlar.length ? d.alanlar : null; applyFields(); render(); }, err));
+  for (const yy of [S.yil - 1, S.yil]) for (let m = 1; m <= 12; m++) S.unsub.push(db.collection('aktiviteler').where('donem', '==', `${yy}-${pad(m)}`).onSnapshot(snap => { S.months[`${yy}-${m}`] = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._ac = null; rStatus(); render(); }, err));
+  S.unsub.push(db.collection('dof').onSnapshot(snap => { S._dofsRaw = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._dc = null; render(); }, err));
+  S.unsub.push(db.collection('cezalar').onSnapshot(snap => { S._czRaw = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._zc = null; render(); }, err));
+  S.unsub.push(db.collection('kazalar').onSnapshot(snap => { S._kazRaw = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._kc = null; render(); }, err));
+}
+function banner(text, warn){ $('#banner').innerHTML = text ? `<div class="banner${warn?' warn':''}">${text}</div>` : ''; }
+
+/* ---------- kullanıcı ve giriş ---------- */
+const AUTH = { me:null, kimlikler:{}, hesaplar:{}, bagRaw:{}, bagList:[], fails:0, lockUntil:0, names:{} };
+const PBKDF2_IT = 600000;
+const ekey = e => String(e || '').trim().toLowerCase().replace(/[^a-z0-9_\-.~:@+]/g, '_');
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const rnd = n => crypto.getRandomValues(new Uint8Array(n));
+async function pbkdf2(pw, salt, it = 150000){ const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']); return b64(await crypto.subtle.deriveBits({ name:'PBKDF2', salt:unb64(salt), iterations:it, hash:'SHA-256' }, k, 256)); }
+async function makeHash(pw){ const salt = b64(rnd(16)); return { salt, hash: await pbkdf2(pw, salt, PBKDF2_IT), it: PBKDF2_IT }; }
+async function checkHash(pw, salt, hash, it){ return !!(salt && hash && pw) && (await pbkdf2(pw, salt, Number(it) || 150000)) === hash; }
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function b32enc(bytes){ let bits = 0, val = 0, out = ''; for (const b of bytes) { val = (val << 8) | b; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } } if (bits > 0) out += B32[(val << (5 - bits)) & 31]; return out; }
+function b32dec(s){ let bits = 0, val = 0; const out = []; for (const c of String(s).toUpperCase().replace(/[\s=]/g, '')) { const i = B32.indexOf(c); if (i < 0) continue; val = (val << 5) | i; bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } } return new Uint8Array(out); }
+async function totpAt(secret, step){ const key = await crypto.subtle.importKey('raw', b32dec(secret), { name:'HMAC', hash:'SHA-1' }, false, ['sign']); const msg = new ArrayBuffer(8), v = new DataView(msg); v.setUint32(0, Math.floor(step / 4294967296)); v.setUint32(4, step >>> 0); const h = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg)); const o = h[h.length-1] & 15; return String((((h[o] & 127) << 24) | (h[o+1] << 16) | (h[o+2] << 8) | h[o+3]) % 1e6).padStart(6, '0'); }
+/* Kodu cihaz saatine göre center±range adım (30 sn) içinde arar; eşleşen kaymayı döndürür, yoksa null */
+async function findTotp(secret, code, center = 0, range = 2){ code = String(code || '').replace(/\D/g, ''); if (!secret || code.length !== 6) return null; const s = Math.floor(Date.now() / 30000) + center; const order = [0]; for (let i = 1; i <= range; i++) order.push(-i, i); for (const d of order) if (await totpAt(secret, s + d) === code) return center + d; return null; }
+async function checkTotp(secret, code, kayma = 0){ return (await findTotp(secret, code, kayma, 3)) !== null; }
+const clockNow = () => new Date().toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const pwRule = p => p.length >= 10 && /[a-zçğıöşü]/.test(p) && /[A-ZÇĞİÖŞÜ]/.test(p) && /\d/.test(p);
+const PW_HINT = 'En az 10 karakter; büyük harf, küçük harf ve rakam içermeli.';
+function genPw(){ const U = 'ABCDEFGHJKMNPQRSTUVWXYZ', L = 'abcdefghjkmnpqrstuvwxyz', D = '23456789', A = U + L + D; const r = rnd(14); const c = [U[r[0] % U.length], L[r[1] % L.length], D[r[2] % D.length]]; for (let i = 3; i < 14; i++) c.push(A[r[i] % A.length]); for (let i = c.length - 1; i > 0; i--) { const j = rnd(1)[0] % (i + 1); [c[i], c[j]] = [c[j], c[i]]; } return c.join(''); }
+/* Aynı Claude hesabında birden fazla uygulama hesabı olabilir: kimlik e-postaya göre ayrı saklanır */
+const kimlikRef = email => S.db.collection('data/users/' + S.meId).doc('kimlik_' + ekey(email));
+const fmtTs = v => { const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); };
+const durumOf = h => !h.aktif ? ['Pasif',''] : (h.geciciHash && !(h.uids || []).length) ? ((h.sifirlaSurumu||0) > 0 ? ['Şifre sıfırlandı','warn'] : ['Davet bekliyor','info']) : ['Aktif','ok'];
+async function copyText(t, btn){ try { await navigator.clipboard.writeText(t); if (btn) { const o = btn.textContent; btn.textContent = 'Kopyalandı'; setTimeout(() => btn.textContent = o, 1500); } } catch { toast('Kopyalanamadı; metni seçip kopyalayın'); } }
+
+function appVisible(on){
+  $('#tabs').hidden = !on; $('#hdr-user').hidden = !on; 
+  document.querySelectorAll('section.view').forEach(s => s.hidden = on ? s.id !== 'v-' + S.tab : s.id !== 'v-auth');
+}
+function authCard(title, body, sub){ return `<div class="panel auth-card"><header><h2>${title}</h2></header>${sub ? `<p class="muted" style="margin:-4px 0 14px">${sub}</p>` : ''}${body}</div>`; }
+function showAuth(step, ctx = {}){
+  appVisible(false);
+  const box = $('#v-auth'); const msgs = { loading:'Yükleniyor…', offline:'Giriş yapmak için sayfayı Claude içinde açın.', nodb:'Kayıtlara ulaşılamadı. Claude hesabınızla oturum açıp sayfayı yeniden açın.', nocrypto:'Bu tarayıcı güvenli giriş için gereken şifreleme özelliğini desteklemiyor. Güncel Chrome, Safari veya Edge kullanın.', notready:'Uygulama henüz kurulmadı. Yönetici ilk girişini yaptıktan sonra size e-posta ve geçici şifre iletilecek.' };
+  if (msgs[step]) { box.innerHTML = authCard('SiteEye', `<p class="muted">${msgs[step]}</p>`); return; }
+  if (step === 'bootstrap') {
+    box.innerHTML = authCard('İlk yönetici hesabı', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-ad">Ad soyad</label><input id="au-ad" autocomplete="name"></div>
+      <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username"></div>
+      <div class="fld"><label for="au-pw">Şifre</label><input id="au-pw" type="password" autocomplete="new-password"><span class="hint">${PW_HINT}</span></div>
+      <div class="fld"><label for="au-pw2">Şifre tekrar</label><input id="au-pw2" type="password" autocomplete="new-password"></div>
+      <div class="actions"><button class="btn primary" type="submit">Devam</button><span class="err" id="au-msg"></span></div></form>`, 'Uygulamada henüz kullanıcı yok. Sayfa sahibi olarak ilk admin hesabını siz oluşturuyorsunuz.');
+    $('#au-f').addEventListener('submit', e => { e.preventDefault(); const ad = $('#au-ad').value.trim(), email = $('#au-mail').value.trim().toLowerCase(), pw = $('#au-pw').value; const m = $('#au-msg');
+      if (!ad || !/^\S+@\S+\.\S+$/.test(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
+      if (!pwRule(pw)) return m.textContent = PW_HINT; if (pw !== $('#au-pw2').value) return m.textContent = 'Şifreler aynı değil.';
+      showAuth('totp', { mode:'bootstrap', ad, email, pw }); });
+    return;
+  }
+  if (step === 'login') {
+    const pre = ctx.email || ls.get('isg.mail') || Object.keys(AUTH.kimlikler)[0] || '';
+    box.innerHTML = authCard('Giriş', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username" value="${esc(pre)}"></div>
+      <div class="fld"><label for="au-pw">Şifre</label><input id="au-pw" type="password" autocomplete="current-password"></div>
+      <div class="fld"${AUTH.kimlikler[pre.toLowerCase()] ? '' : ' hidden'} id="au-code-wrap"><label for="au-code">Authenticator kodu</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="mono"><span class="hint">Authenticator uygulamasındaki 6 haneli kod</span></div>
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Giriş yap</button><span class="err" id="au-msg">${esc(ctx.msg || '')}</span></div>
+      <p class="muted" style="grid-column:1/-1;margin:0;font-size:.85rem">İlk kez giriyorsanız yöneticinin verdiği geçici şifreyi yazın; kod sorulmaz.</p></form>`, 'MTX Projesi İSG kayıt sistemi');
+    $('#au-mail').addEventListener('input', e => { $('#au-code-wrap').hidden = !AUTH.kimlikler[e.target.value.trim().toLowerCase()]; });
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go');
+      try { const L = JSON.parse(localStorage.getItem('isg.kilit') || 'null'); if (L) { AUTH.fails = L.f || 0; AUTH.lockUntil = Math.max(AUTH.lockUntil, L.u || 0); } } catch {}
+      if (Date.now() < AUTH.lockUntil) return m.textContent = `Çok fazla hatalı deneme. ${Math.ceil((AUTH.lockUntil - Date.now())/1000)} sn sonra tekrar deneyin.`;
+      const email = $('#au-mail').value.trim().toLowerCase(), pw = $('#au-pw').value, code = $('#au-code').value;
+      const h = AUTH.hesaplar[ekey(email)];
+      const fail = t => { AUTH.fails++; if (AUTH.fails >= 5) AUTH.lockUntil = Date.now() + (AUTH.fails >= 10 ? 15 : AUTH.fails >= 7 ? 5 : 1) * 60000; try { localStorage.setItem('isg.kilit', JSON.stringify({ f:AUTH.fails, u:AUTH.lockUntil })); } catch {} m.textContent = t; btn.disabled = false; };
+      const okReset = () => { AUTH.fails = 0; AUTH.lockUntil = 0; try { localStorage.removeItem('isg.kilit'); } catch {} };
+      btn.disabled = true; m.textContent = 'Kontrol ediliyor…';
+      if (!h) return fail('E-posta veya şifre hatalı.');
+      if (!h.aktif) return fail('E-posta veya şifre hatalı.');
+      const k = AUTH.kimlikler[email];
+      if (k && k.email === email && (h.sifirlaSurumu||0) <= (k.sifirlaSurumu||0) && await checkHash(pw, k.salt, k.hash, k.it)) {
+        if (!code) { $('#au-code-wrap').hidden = false; btn.disabled = false; return m.textContent = 'Authenticator kodunu girin.'; }
+        const off = await findTotp(k.totp, code, k.kayma || 0, 3);
+        const step = off === null ? null : Math.floor(Date.now() / 30000) + off;
+        if (off !== null && step <= (Number(k.sonAdim) || 0)) return fail('Bu kod daha önce kullanıldı. Telefondaki yeni kodu bekleyip tekrar deneyin.');
+        if (off === null) return fail(`Authenticator kodu hatalı. Telefonda "SiteEye" (eski adıyla "İSG Faaliyet") adına birden fazla kayıt varsa en son eklediğinizi kullanın. Bu cihazın saati: ${clockNow()}`);
+        kimlikRef(email).update({ kayma:off, sonAdim:step }).catch(() => {}); AUTH.kimlikler[email] = { ...k, kayma:off, sonAdim:step };
+        okReset(); ls.set('isg.mail', email);
+        if (!approved(h)) return pendingApproval(h);
+        return loginOk(h);
+      }
+      if (h.geciciHash && await checkHash(pw, h.geciciSalt, h.geciciHash, h.geciciIt)) {
+        if (h.geciciSon && h.geciciSon < new Date().toISOString()) return fail('Geçici şifrenin süresi dolmuş. Yöneticinizden yeni şifre isteyin.');
+        okReset(); ls.set('isg.mail', email); return showAuth('newpw', { mode:'activate', email, h }); }
+      fail('E-posta veya şifre hatalı.');
+    });
+    return;
+  }
+  if (step === 'newpw') {
+    box.innerHTML = authCard('Yeni şifrenizi belirleyin', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-pw">Yeni şifre</label><input id="au-pw" type="password" autocomplete="new-password"><span class="hint">${PW_HINT}</span></div>
+      <div class="fld"><label for="au-pw2">Yeni şifre tekrar</label><input id="au-pw2" type="password" autocomplete="new-password"></div>
+      <div class="actions"><button class="btn primary" type="submit">Devam</button><button class="btn" type="button" id="au-back">Vazgeç</button><span class="err" id="au-msg"></span></div></form>`, `${esc(ctx.email)} · Geçici şifreniz doğrulandı. Şimdi yalnızca sizin bileceğiniz bir şifre belirleyin.`);
+    $('#au-back').addEventListener('click', () => showAuth('login'));
+    $('#au-f').addEventListener('submit', e => { e.preventDefault(); const pw = $('#au-pw').value, m = $('#au-msg');
+      if (!pwRule(pw)) return m.textContent = PW_HINT; if (pw !== $('#au-pw2').value) return m.textContent = 'Şifreler aynı değil.';
+      showAuth('totp', { ...ctx, pw }); });
+    return;
+  }
+  if (step === 'totp') {
+    const pk = 'isg.bekleyen.' + ekey(ctx.email) + '.' + (ctx.mode || '');
+    const secret = ctx.secret || ls.get(pk) || b32enc(rnd(20)); ctx.secret = secret; ls.set(pk, secret);
+    const label = encodeURIComponent('SiteEye:' + ctx.email);
+    const uri = `otpauth://totp/${label}?secret=${secret}&issuer=SiteEye&algorithm=SHA1&digits=6&period=30`;
+    box.innerHTML = authCard('Authenticator tanımlayın', `<ol class="steps">
+      <li>Telefonunuzda <b>Google Authenticator</b> veya <b>Microsoft Authenticator</b> uygulamasını açın.</li>
+      <li>"+" ile yeni hesap ekleyip aşağıdaki QR kodu okutun. Okutamazsanız anahtarı elle girin.</li>
+      <li>Uygulamada görünen 6 haneli kodu yazın.</li></ol>
+      <p class="muted" style="margin:-6px 0 12px;font-size:.85rem">Daha önce denediyseniz telefondaki eski "SiteEye" veya "İSG Faaliyet" kayıtlarını silin; bu ekrandaki anahtar siz tamamlayana kadar değişmez. Bu cihazın saati: <span class="mono" id="au-clock">${clockNow()}</span></p>
+      <div class="qrrow"><div class="qr" id="au-qr" aria-label="Authenticator QR kodu"></div>
+      <div class="fld" style="min-width:0;flex:1"><label>Elle giriş anahtarı</label><div class="secret mono" id="au-sec">${secret.replace(/(.{4})/g,'$1 ').trim()}</div><button class="btn sm" type="button" id="au-cp">Anahtarı kopyala</button></div></div>
+      <form class="f one" id="au-f" novalidate style="margin-top:14px">
+      <div class="fld"><label for="au-code">6 haneli kod</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="mono" placeholder="000000"></div>
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Doğrula ve bitir</button>${ctx.mode === 'renew' ? '<button class="btn" type="button" id="au-back">Vazgeç</button>' : ''}<span class="err" id="au-msg"></span></div></form>`, esc(ctx.email));
+    try { new QRCode($('#au-qr'), { text:uri, width:184, height:184, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M }); } catch { $('#au-qr').innerHTML = '<span class="muted" style="font-size:.8rem;color:#333">QR oluşturulamadı; anahtarı elle girin.</span>'; }
+    $('#au-cp').addEventListener('click', e => copyText(secret, e.target));
+    $('#au-back')?.addEventListener('click', () => { loginOk(AUTH.me, true); go('hesap'); });
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go');
+      const kayma = await findTotp(secret, $('#au-code').value, 0, 20);
+      if (kayma === null) return m.textContent = 'Kod doğrulanamadı. Telefonda bu ekrandaki QR ile eklenen (en son) kaydın kodunu yazın; eski "SiteEye" / "İSG Faaliyet" kayıtlarını silip QR\'ı yeniden okutun.';
+      if (Math.abs(kayma) > 2) toast(`Cihaz saati telefonla yaklaşık ${Math.round(Math.abs(kayma)/2)} dk farklı; otomatik düzeltildi`);
+      btn.disabled = true; m.textContent = 'Kaydediliyor…';
+      try {
+        const now = new Date().toISOString();
+        const sonAdim = Math.floor(Date.now() / 30000) + kayma;
+        if (ctx.mode === 'renew') { await kimlikRef(ctx.email).update({ totp:secret, kayma, sonAdim, guncelleme:now }); AUTH.kimlikler[ctx.email] = { ...AUTH.kimlikler[ctx.email], totp:secret, kayma, sonAdim }; try { localStorage.removeItem(pk); } catch {} toast('Authenticator güncellendi'); loginOk(AUTH.me, true); go('hesap'); return; }
+        const { salt, hash, it } = await makeHash(ctx.pw);
+        let h = ctx.h;
+        if (ctx.mode === 'bootstrap') { h = { email:ctx.email, ad:ctx.ad, rol:'admin', aktif:true, sifirlaSurumu:0, uids:[S.meId], olusturma:now, olusturan:ctx.email }; await S.db.doc('hesaplar/' + ekey(ctx.email)).set(h); h = { key:ekey(ctx.email), ...h }; AUTH.hesaplar[h.key] = h; }
+        const kim = { email:ctx.email, salt, hash, it, totp:secret, kayma, sonAdim, sifirlaSurumu:h.sifirlaSurumu || 0, guncelleme:now };
+        await kimlikRef(ctx.email).set(kim); AUTH.kimlikler[ctx.email] = kim; try { localStorage.removeItem(pk); } catch {}
+        if (!approved(h)) return pendingApproval(h);
+        toast('Hesabınız hazır'); loginOk(h);
+      } catch (err) { btn.disabled = false; m.textContent = err?.code === 'not_granted' || err?.code === 'invalid_argument' ? 'Kaydedilemedi: bu işlem için yetkiniz yok.' : 'Kaydedilemedi: ' + (err?.message || err?.code || 'hata'); }
+    });
+  }
+}
+/* Her uygulama hesabı, yöneticinin onayladığı Claude hesap(lar)ına bağlıdır; başka biri aynı e-postayla giremez */
+/* baglar/<claudeUid> = { hesaplar: { <anahtar>: { email, talep, sonGiris, zaman } } } — aynı Claude hesabı birden çok uygulama hesabı kullanabilir */
+const bagKey = e => ekey(e).replace(/[^a-z0-9]/g, '_');
+function bagWrite(email, patch){ const cur = { ...(AUTH.bagRaw[S.meId] || {}) }, k = bagKey(email); cur[k] = { ...(cur[k] || {}), email, ...patch }; AUTH.bagRaw[S.meId] = cur; return S.db.doc('baglar/' + S.meId).set({ hesaplar:cur }); }
+const approved = h => Array.isArray(h.uids) && h.uids.includes(S.meId);
+async function pendingApproval(h){
+  if (S.isOwner && h.rol === 'admin') { try { await S.db.doc('hesaplar/' + h.key).update({ uids:[...(Array.isArray(h.uids) ? h.uids : []), S.meId] }); h = { ...h, uids:[...(h.uids || []), S.meId] }; AUTH.hesaplar[h.key] = h; return loginOk(h); } catch {} }
+  bagWrite(h.email, { talep:true, zaman:new Date().toISOString() }).catch(() => {});
+  showAuth('login', { email:h.email, msg:'Hesabınız bu Claude hesabıyla ilk kez kullanılıyor. Yönetici onayından sonra giriş yapabilirsiniz.' });
+}
+let lastAct = Date.now();
+['pointerdown','keydown'].forEach(ev => document.addEventListener(ev, () => { lastAct = Date.now(); }, { passive:true }));
+setInterval(() => { if (AUTH.me && Date.now() - lastAct > 30 * 60000) logout('30 dakika işlem yapılmadığı için oturum kapatıldı.'); }, 60000);
+function loginOk(h, silent){
+  AUTH.me = h; S.isAdmin = h.rol === 'admin';
+  try { localStorage.setItem('isg.oturum', JSON.stringify({ uid:S.meId, email:h.email, exp:Date.now() + 8*3600e3 })); } catch {}
+  if (!silent) bagWrite(h.email, { talep:false, sonGiris:new Date().toISOString() }).catch(() => {});
+  $('#hdr-user').innerHTML = `<span class="who"><b>${esc(h.ad || h.email)}</b><span class="pill ${S.isAdmin ? 'info' : ''}">${S.isAdmin ? 'Admin' : 'Kullanıcı'}</span></span><button class="btn sm" data-tab="hesap">Hesabım</button><button class="btn sm" id="logout">Çıkış</button>`;
+  $('#logout').onclick = () => logout();
+  if (!S.subscribed) { S.subscribed = true; subscribe(); }
+  if (!TABS.some(t => t[0] === S.tab) || (['ayar','kullanici'].includes(S.tab) && !S.isAdmin)) S.tab = 'aktivite';
+  appVisible(true); go(S.tab);
+}
+function logout(msg){ AUTH.me = null; S.isAdmin = false; try { localStorage.removeItem('isg.oturum'); } catch {} $('#layer').innerHTML = ''; showAuth('login', { msg }); }
+function decideAuth(){
+  if (!Object.keys(AUTH.hesaplar).length) return showAuth(S.isOwner ? 'bootstrap' : 'notready');
+  let s = null; try { s = JSON.parse(localStorage.getItem('isg.oturum') || 'null'); } catch {}
+  const h = s && AUTH.hesaplar[ekey(s.email)], k = s && AUTH.kimlikler[s.email];
+  if (s && s.uid === S.meId && s.exp > Date.now() && h && h.aktif && k && k.email === s.email && (h.sifirlaSurumu||0) <= (k.sifirlaSurumu||0) && approved(h)) return loginOk(h, true);
+  showAuth('login');
+}
+function onHesapChange(){
+  if (!AUTH.me) return;
+  const h = AUTH.hesaplar[ekey(AUTH.me.email)];
+  if (!h || !h.aktif) return logout('Hesabınız pasifleştirildi veya silindi.');
+  if (!approved(h)) return logout('Bu cihaz için erişim onayı kaldırıldı.');
+  if ((h.sifirlaSurumu||0) > (AUTH.kimlikler[AUTH.me.email]?.sifirlaSurumu||0)) return logout('Şifreniz yönetici tarafından sıfırlandı. Yeni geçici şifrenizle girin.');
+  const roleChanged = h.rol !== AUTH.me.rol; AUTH.me = h; S.isAdmin = h.rol === 'admin';
+  if (roleChanged) loginOk(h, true); else render();
+}
+
+/* KULLANICILAR (admin) */
+function rKullanici(){
+  if (!S.isAdmin) return;
+  const f = $('#f-user');
+  if (!f._init) {
+    f._init = true;
+    $('#u-gen').addEventListener('click', () => { $('#u-pw').value = genPw(); });
+    $('#u-pw').value = genPw();
+    f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#u-msg');
+      const ad = $('#u-ad').value.trim(), email = $('#u-mail').value.trim().toLowerCase(), rol = $('#u-rol').value, pw = $('#u-pw').value.trim();
+      if (!ad || !/^\S+@\S+\.\S+$/.test(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
+      if (AUTH.hesaplar[ekey(email)]) return m.textContent = 'Bu e-posta ile bir kullanıcı zaten var.';
+      if (!pwRule(pw)) { $('#u-pw').value = genPw(); return m.textContent = 'Yeni geçici şifre üretildi, tekrar deneyin.'; }
+      m.textContent = 'Kaydediliyor…';
+      try { const { salt, hash, it } = await makeHash(pw);
+        await S.db.doc('hesaplar/' + ekey(email)).set({ email, ad, rol, aktif:true, geciciSalt:salt, geciciHash:hash, geciciIt:it, geciciSon:new Date(Date.now() + 72*3600e3).toISOString(), uids:[], sifirlaSurumu:0, olusturan:AUTH.me.email, olusturma:new Date().toISOString() });
+        f.reset(); $('#u-pw').value = genPw(); m.textContent = ''; showCred(ad, email, pw, 'eklendi');
+      } catch (err) { m.textContent = adminErr(err); }
+    });
+  }
+  // onay bekleyen cihaz bağlantıları
+  const pend = AUTH.bagList.filter(b => { const uid = b.uid; const hh = AUTH.hesaplar[ekey(b.email)]; return b.talep && hh && !(hh.uids || []).includes(uid) && !(hh.reddedilen || []).includes(uid); });
+  const pn = $('#u-pending');
+  pn.hidden = !pend.length;
+  pn.innerHTML = pend.length ? `<header><h3>Onay bekleyen girişler</h3><span class="muted" style="font-size:.8rem">Claude hesap adını kontrol edip onaylayın</span></header><div class="tablewrap"><table><thead><tr><th>Uygulama hesabı</th><th>Claude hesabı</th><th>Talep</th><th></th></tr></thead><tbody>${pend.map(b => { const uid = b.uid; return `<tr><td>${esc(AUTH.hesaplar[ekey(b.email)].ad)} <span class="muted mono" style="font-size:.8rem">${esc(b.email)}</span></td><td data-uname="${esc(uid)}">${esc(AUTH.names[uid] || '…')}</td><td class="mono" style="font-size:.85rem">${b.zaman ? esc(fmtTs(b.zaman)) : '—'}</td><td style="white-space:nowrap"><button class="btn sm primary" data-uok="${esc(uid)}" data-umail="${esc(b.email)}">Onayla</button> <button class="btn sm danger" data-uno="${esc(uid)}" data-umail="${esc(b.email)}">Reddet</button></td></tr>`; }).join('')}</tbody></table></div>` : '';
+  const need = [...new Set(pend.map(b => b.uid))].filter(uid => !AUTH.names[uid]);
+  if (need.length && S.user?.profiles) S.user.profiles(need).then(ps => { need.forEach(uid => { AUTH.names[uid] = ps?.[uid]?.name || 'Adı görünmüyor'; }); render(); }).catch(() => {});
+  const list = Object.values(AUTH.hesaplar).sort((a,b) => (a.ad||'').localeCompare(b.ad||'', 'tr'));
+  const last = email => AUTH.bagList.filter(b => b.email === email && b.sonGiris).map(b => b.sonGiris).sort().pop();
+  $('#u-count').textContent = `${list.length} kullanıcı · ${list.filter(h => h.rol === 'admin').length} admin`;
+  $('#u-table').innerHTML = `<thead><tr><th>Ad soyad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Son giriş</th><th></th></tr></thead><tbody>` + list.map(h => { const [dt, dk] = durumOf(h); const self = h.email === AUTH.me.email; const lg = last(h.email);
+    return `<tr><td>${esc(h.ad)}${self ? ' <span class="muted">(siz)</span>' : ''}</td><td class="mono" style="font-size:.85rem">${esc(h.email)}</td>
+      <td>${self ? (h.rol === 'admin' ? 'Admin' : 'Kullanıcı') : `<select class="btn sm" data-urol="${h.key}" aria-label="Rol"><option value="kullanici"${h.rol==='kullanici'?' selected':''}>Kullanıcı</option><option value="admin"${h.rol==='admin'?' selected':''}>Admin</option></select>`}</td>
+      <td><span class="pill ${dk}">${dt}</span></td><td class="mono" style="font-size:.85rem">${lg ? esc(fmtTs(lg)) : '—'}</td>
+      <td style="white-space:nowrap">${self ? '' : `<button class="btn sm" data-ureset="${esc(h.key)}">Şifre sıfırla</button> <button class="btn sm" data-uakt="${h.key}">${h.aktif ? 'Pasifleştir' : 'Aktifleştir'}</button> <button class="btn sm danger" data-udel="${h.key}">Sil</button>`}</td></tr>`; }).join('') + '</tbody>';
+}
+function adminErr(err){ return (err?.code === 'not_granted' || err?.code === 'invalid_argument') ? 'Kaydedilemedi: kullanıcı yönetimi için bu sayfada Claude düzenleme (Editor) yetkiniz olmalı.' : 'Kaydedilemedi: ' + (err?.message || err?.code || 'hata'); }
+function showCred(ad, email, pw, what){
+  $('#u-cred').innerHTML = `<div class="banner"><b>${esc(ad)} ${what}.</b> Bu bilgileri kullanıcıya iletin; geçici şifre bir daha gösterilmez.<div class="cred mono" id="u-cred-t">E-posta: ${esc(email)}\nGeçici şifre: ${esc(pw)}</div><button class="btn sm" id="u-cred-cp">Kopyala</button> <button class="btn sm" id="u-cred-x">Kapat</button></div>`;
+  $('#u-cred-cp').onclick = e => copyText(`E-posta: ${email}\nGeçici şifre: ${pw}`, e.target); $('#u-cred-x').onclick = () => $('#u-cred').innerHTML = '';
+}
+document.addEventListener('click', async e => { const ok = e.target.closest('[data-uok]'), no = e.target.closest('[data-uno]'); if ((!ok && !no) || !S.isAdmin) return;
+  const el = ok || no, uid = el.dataset.uok || el.dataset.uno; const h = AUTH.hesaplar[ekey(el.dataset.umail)]; if (!h || !uid) return;
+  try {
+    if (ok) { await S.db.doc('hesaplar/' + h.key).update({ uids:[...new Set([...(h.uids || []), uid])], geciciSalt:null, geciciHash:null, geciciIt:null, geciciSon:null }); toast('Giriş onaylandı'); }
+    else { await S.db.doc('hesaplar/' + h.key).update({ reddedilen:[...new Set([...(h.reddedilen || []), uid])] }); toast('Talep reddedildi'); }
+  } catch (err) { toast(adminErr(err)); } });
+const admins = () => Object.values(AUTH.hesaplar).filter(h => h.rol === 'admin' && h.aktif);
+document.addEventListener('change', async e => { const s = e.target.closest('[data-urol]'); if (!s) return; const h = AUTH.hesaplar[s.dataset.urol];
+  if (h.rol === 'admin' && s.value !== 'admin' && admins().length <= 1) { s.value = 'admin'; return toast('En az bir admin kalmalı'); }
+  try { await S.db.doc('hesaplar/' + h.key).update({ rol:s.value }); toast('Rol güncellendi'); } catch (err) { s.value = h.rol; toast(adminErr(err)); } });
+document.addEventListener('click', async e => {
+  const r = e.target.closest('[data-ureset]'), a = e.target.closest('[data-uakt]'), d = e.target.closest('[data-udel]');
+  const b = r || a || d; if (!b || !S.isAdmin) return;
+  const h = AUTH.hesaplar[(r && r.dataset.ureset) || (a && a.dataset.uakt) || (d && d.dataset.udel)]; if (!h) return;
+  if ((d || r) && !b.dataset.sure) { b.dataset.sure = 1; const o = b.textContent; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = o; }, 3500); return; }
+  try {
+    if (r) { const pw = genPw(); const { salt, hash, it } = await makeHash(pw); await S.db.doc('hesaplar/' + h.key).update({ geciciSalt:salt, geciciHash:hash, geciciIt:it, geciciSon:new Date(Date.now() + 72*3600e3).toISOString(), uids:[], sifirlaSurumu:(h.sifirlaSurumu||0) + 1, sifirlamaTarihi:new Date().toISOString() }); showCred(h.ad, h.email, pw, 'için şifre sıfırlandı'); }
+    if (a) { if (h.aktif && h.rol === 'admin' && admins().length <= 1) return toast('En az bir aktif admin kalmalı'); await S.db.doc('hesaplar/' + h.key).update({ aktif:!h.aktif }); toast(h.aktif ? 'Kullanıcı pasifleştirildi' : 'Kullanıcı aktifleştirildi'); }
+    if (d) { if (h.rol === 'admin' && admins().length <= 1) return toast('Son admin silinemez'); await S.db.doc('hesaplar/' + h.key).delete(); toast('Kullanıcı silindi'); }
+  } catch (err) { toast(adminErr(err)); }
+});
+
+/* HESABIM */
+function rHesap(){
+  if (!AUTH.me) return;
+  $('#h-info').innerHTML = `<div><span class="muted">Ad soyad</span><b>${esc(AUTH.me.ad || '')}</b></div><div><span class="muted">E-posta</span><b class="mono">${esc(AUTH.me.email)}</b></div><div><span class="muted">Rol</span><b>${S.isAdmin ? 'Admin' : 'Kullanıcı'}</b></div>`;
+  const f = $('#f-pw');
+  if (f._init) return; f._init = true;
+  f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#h-msg'), k = AUTH.kimlikler[AUTH.me.email], g = s => $(s).value;
+    if (!await checkHash(g('#h-old'), k?.salt, k?.hash, k?.it)) return m.textContent = 'Mevcut şifre hatalı.';
+    if (!pwRule(g('#h-new'))) return m.textContent = PW_HINT; if (g('#h-new') !== g('#h-new2')) return m.textContent = 'Yeni şifreler aynı değil.';
+    if (!await checkTotp(k.totp, g('#h-code'), k.kayma || 0)) return m.textContent = 'Authenticator kodu hatalı.';
+    m.textContent = 'Kaydediliyor…';
+    try { const { salt, hash, it } = await makeHash(g('#h-new')); await kimlikRef(AUTH.me.email).update({ salt, hash, it, guncelleme:new Date().toISOString() }); AUTH.kimlikler[AUTH.me.email] = { ...k, salt, hash, it }; f.reset(); m.textContent = ''; toast('Şifreniz değiştirildi'); }
+    catch (err) { m.textContent = 'Kaydedilemedi: ' + (err?.code || 'hata'); }
+  });
+  $('#f-totp').addEventListener('submit', async e => { e.preventDefault(); const m = $('#t-msg'), k = AUTH.kimlikler[AUTH.me.email];
+    if (!await checkHash($('#t-pw').value, k?.salt, k?.hash, k?.it)) return m.textContent = 'Şifre hatalı.';
+    if (!await checkTotp(k.totp, $('#t-code').value, k.kayma || 0)) return m.textContent = 'Mevcut authenticator kodu hatalı.';
+    $('#f-totp').reset(); m.textContent = ''; showAuth('totp', { mode:'renew', email:AUTH.me.email });
+  });
+}
+
+/* ---------- açılış ---------- */
+async function boot(){
+  const saved = ls.get('isg.tab'); S.tab = TABS.some(t => t[0] === saved) ? saved : 'aktivite';
+  showAuth('loading');
+  if (!window.claude?.use) { showAuth('offline'); return; }
+  const [db, user, assets, downloads] = await Promise.all(['db','user','assets','downloads'].map(n => window.claude.use(n).catch(() => null)));
+  Object.assign(S, { db, user, assets, downloads });
+  if (user) { try { S.meId = await user.id(); S.isOwner = await user.isOwner(); const c = await user.can('data.write'); S.canWrite = c !== false; } catch {} }
+  if (!db || !S.meId) { showAuth('nodb'); return; }
+  if (!window.crypto?.subtle) { showAuth('nocrypto'); return; }
+  try {
+    const snap = await db.collection('data/users/' + S.meId).get();
+    for (const d of snap.docs) { const v = d.data(); if (!v?.email) continue;
+      if (d.id === 'kimlik') { if (!AUTH.kimlikler[v.email]) { AUTH.kimlikler[v.email] = v; kimlikRef(v.email).set(v).catch(() => {}); } }
+      else if (d.id.startsWith('kimlik_')) AUTH.kimlikler[v.email] = v; }
+  } catch {}
+  let first = true;
+  db.collection('hesaplar').onSnapshot(snap => { AUTH.hesaplar = Object.fromEntries(snap.docs.map(d => [d.id, { key:d.id, ...d.data() }])); if (first) { first = false; decideAuth(); } else { onHesapChange(); if (S.tab === 'kullanici') render(); } }, () => showAuth('nodb'));
+  db.collection('baglar').onSnapshot(snap => { const str = v => typeof v === 'string' ? v : ''; AUTH.bagRaw = {}; AUTH.bagList = [];
+    snap.docs.forEach(d => { const v = d.data() || {}; const map = (v.hesaplar && typeof v.hesaplar === 'object' && !Array.isArray(v.hesaplar)) ? v.hesaplar : {}; AUTH.bagRaw[d.id] = map;
+      const accs = Object.values(map).filter(a => a && typeof a === 'object'); if (!accs.length && typeof v.email === 'string') accs.push(v);
+      accs.forEach(a => AUTH.bagList.push({ uid:d.id, email:str(a.email).toLowerCase(), talep:a.talep === true, sonGiris:str(a.sonGiris), zaman:str(a.zaman) })); });
+    if (AUTH.me && S.tab === 'kullanici') render(); });
+  if (!S.canWrite) banner('Bu sayfayı görüntüleme yetkiniz var; kayıt girmek için sayfa sahibinden düzenleme yetkisi isteyin.');
+}
+boot();
+})();
+</script>
