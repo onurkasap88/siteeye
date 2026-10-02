@@ -534,8 +534,10 @@ const validField = f => f && typeof f === 'object' && typeof f.key === 'string' 
 const F = () => { const a = Array.isArray(S.fields) ? S.fields.filter(validField).map(f => ({ ...f, secenekler: Array.isArray(f.secenekler) ? f.secenekler.filter(x => typeof x === 'string') : [], kosul: f.kosul && Array.isArray(f.kosul.degerler) ? { alan: KEY_RE.test(f.kosul.alan || '') ? f.kosul.alan : 'aktivite', degerler:f.kosul.degerler.filter(x => typeof x === 'string') } : null, rapor: KEY_RE.test(f.rapor || '') ? f.rapor : '', yer: typeof f.yer === 'string' ? f.yer : '' })) : []; return a.length ? a : DEFAULT_FIELDS; };
 const fld = k => F().find(f => f.key === k);
 const opt = k => (fld(k)?.secenekler || []);
+/* Raporlayan listesi = aktif kullanıcıların adları (Kullanıcılar sekmesinden gelir) */
+let RAP = [];
 const activeFields = () => F().filter(f => f.aktif !== false);
-function applyFields(){ Object.assign(S.cfg, { uzmanlar:opt('raporlayan'), aktiviteler:opt('aktivite'), lokasyonlar:opt('lokasyon'), altyukleniciler:opt('altYuklenici') }); S._ac = S._dc = S._kc = S._zc = null; }
+function applyFields(){ Object.assign(S.cfg, { uzmanlar:RAP.slice(), aktiviteler:opt('aktivite'), lokasyonlar:opt('lokasyon'), altyukleniciler:opt('altYuklenici') }); S._ac = S._dc = S._kc = S._zc = null; }
 /* Kaza kayıtları: olay tipi Kaza ya da Ramak Kala; eski "RamakKala/Minor/Major/Fatality" sınıfları yeni adlara eşlenir */
 const SINIF_MAP = { Minor:'Minör', Major:'Majör', HiPo:'HiPo', Fatality:'Ölümlü' };
 function kazaNorm(k){ const tip = k.olayTipi || (k.sinif === 'RamakKala' ? 'Ramak Kala' : 'Kaza'); const sinif = tip === 'Kaza' ? ((Object.hasOwn(SINIF_MAP, k.sinif) ? SINIF_MAP[k.sinif] : k.sinif) || '') : ''; return { ...k, olayTipi:tip, sinif }; }
@@ -716,7 +718,7 @@ function fieldHtml(f){
   const id = 'a-' + f.key, req = f.zorunlu ? ' <span class="req">*</span>' : '', ph = f.yer ? ` placeholder="${esc(f.yer)}"` : '';
   const kos = f.kosul?.degerler?.length ? ` data-kosul="${esc(f.kosul.alan)}"` : '';
   const wrap = (inner, full) => `<div class="fld${full ? ' full' : ''}" data-key="${esc(f.key)}"${kos}><label for="${esc(id)}">${esc(f.ad)}${req}</label>${inner}</div>`;
-  if (f.tip === 'liste') { let o = f.secenekler || []; if (f.key === 'raporlayan') { const me = tru(AUTH.me?.ad); if (me) o = uniq([me, ...o]); } return wrap(`<select id="${esc(id)}">${opts(o, '', f.zorunlu ? 'Seçin' : '—')}</select>`); }
+  if (f.tip === 'liste') { const o = f.key === 'raporlayan' ? RAP : (f.secenekler || []); return wrap(`<select id="${esc(id)}">${opts(o, '', f.zorunlu ? 'Seçin' : '—')}</select>`); }
   if (f.tip === 'sayi') return wrap(`<input type="number" id="${esc(id)}" min="0" inputmode="numeric"${ph}>`);
   if (f.tip === 'uzun') return wrap(`<textarea id="${esc(id)}"${ph}></textarea>`, true);
   if (f.tip === 'foto') return wrap(`<div class="drop" data-for="${esc(id)}"><input type="file" id="${esc(id)}" accept="image/*" multiple><div class="thumbs"></div><span class="hint">${esc(f.yer || "Fotoğraflar 1600 px'e küçültülerek yüklenir. Hafta ve lokasyona göre klasörlenir.")}</span></div>`, true);
@@ -733,7 +735,7 @@ function fieldVisible(fs, valOf){
 }
 function aktFormVis(){ const v = fieldVisible(activeFields(), k => document.getElementById('a-' + k)?.value || ''); document.querySelectorAll('#f-akt [data-key]').forEach(w => { w.hidden = !v(w.dataset.key); }); }
 function rAkt(){
-  const f = $('#f-akt'); const sig = JSON.stringify(activeFields()) + '|' + (AUTH.me?.ad || '');
+  const f = $('#f-akt'); const sig = JSON.stringify(activeFields()) + '|' + (AUTH.me?.ad || '') + '|' + RAP.join(',');
   if (f._sig !== sig) {
     const keep = {}; f.querySelectorAll('input:not([type=file]),select,textarea').forEach(el => { if (el.id) keep[el.id] = el.value; });
     f.innerHTML = `<div class="fld"><label for="a-tarih">Tarih <span class="req">*</span></label><input type="date" id="a-tarih"></div>` + activeFields().map(fieldHtml).join('') + `<div class="actions"><button class="btn primary" type="submit" id="a-save">Kaydet</button><span class="muted" id="a-msg"></span></div>`;
@@ -1304,7 +1306,7 @@ function rFields(){
   $('#fa-table').innerHTML = `<thead><tr><th>Sıra</th><th>Alan</th><th>Tür</th><th>Seçenekler</th><th>Zorunlu</th><th>Görünürlük</th><th>Durum</th><th></th></tr></thead><tbody>
     <tr><td class="muted">—</td><td><b>Tarih</b></td><td>Tarih</td><td>—</td><td>Evet</td><td>Her zaman</td><td><span class="pill">Sabit</span></td><td></td></tr>` +
     list.map((f, i) => `<tr><td style="white-space:nowrap"><button class="btn sm" data-fup="${i}"${i === 0 ? ' disabled' : ''} aria-label="Yukarı taşı">↑</button> <button class="btn sm" data-fdown="${i}"${i === list.length - 1 ? ' disabled' : ''} aria-label="Aşağı taşı">↓</button></td>
-      <td><b>${esc(f.ad)}</b>${f.sistem ? '' : ' <span class="muted">(özel)</span>'}</td><td>${esc(TIP[f.tip] || f.tip)}</td><td>${f.tip === 'liste' ? (f.secenekler || []).length + ' seçenek' : '—'}</td><td>${f.zorunlu ? 'Evet' : '—'}</td><td>${gor(f)}</td>
+      <td><b>${esc(f.ad)}</b>${f.sistem ? '' : ' <span class="muted">(özel)</span>'}</td><td>${esc(TIP[f.tip] || f.tip)}</td><td>${f.key === 'raporlayan' ? 'Kullanıcılardan (' + RAP.length + ')' : f.tip === 'liste' ? (f.secenekler || []).length + ' seçenek' : '—'}</td><td>${f.zorunlu ? 'Evet' : '—'}</td><td>${gor(f)}</td>
       <td><span class="pill ${f.aktif === false ? '' : 'ok'}">${f.aktif === false ? 'Gizli' : 'Açık'}</span></td>
       <td style="white-space:nowrap"><button class="btn sm" data-fedit="${i}">Düzenle</button>${CORE.includes(f.key) ? '' : ` <button class="btn sm" data-ftog="${i}">${f.aktif === false ? 'Göster' : 'Gizle'}</button>`}${f.sistem ? '' : ` <button class="btn sm danger" data-fdel="${i}">Sil</button>`}</td></tr>`).join('') + '</tbody>';
 }
@@ -1334,6 +1336,7 @@ function openFieldEditor(i){
   <form class="f one" id="f-fld" novalidate>
     <div class="fld"><label for="fe-ad">Alan adı</label><input id="fe-ad" value="${esc(f.ad)}" placeholder="ör. Vardiya"></div>
     <div class="fld"><label for="fe-tip">Tür</label><select id="fe-tip"${f.sistem ? ' disabled' : ''}>${tips.map(t => `<option value="${t}"${t === f.tip ? ' selected' : ''}>${TIP[t]}</option>`).join('')}</select>${f.sistem ? '<span class="hint">Raporlarda kullanılan temel alan; türü değiştirilemez.</span>' : ''}</div>
+    ${f.key === 'raporlayan' ? `<p class="hint" style="margin:0">Raporlayan seçenekleri <b>Kullanıcılar</b> sekmesindeki aktif kullanıcıların adlarından otomatik oluşur (şu an ${RAP.length} kişi). Yeni raporlayan için kullanıcı ekleyin; pasifleştirilen kullanıcı listeden düşer.</p>` : ''}
     <div class="fld" id="fe-sec-wrap"><label for="fe-sec">Seçenekler · her satıra bir seçenek</label><textarea id="fe-sec" rows="9">${esc((f.secenekler || []).join('\n'))}</textarea><span class="hint">Silinen seçenek yeni kayıtlarda seçilemez; eski kayıtlarda değeri korunur.${f.key === 'aktivite' ? ' Aktivite seçenekleri DÖF ve rapor tablolarında da kullanılır.' : ''}</span></div>
     <div class="fld"><label for="fe-yer">Yardım metni · kutunun içinde görünür</label><input id="fe-yer" value="${esc(f.yer || '')}"></div>
     <label class="check"><input type="checkbox" id="fe-zor"${f.zorunlu ? ' checked' : ''}> Zorunlu alan</label>
@@ -1349,15 +1352,15 @@ function openFieldEditor(i){
   const fm = o.querySelector('#f-fld'), q = x => fm.querySelector(x);
   const checks = () => { const ka = q('#fe-kalan'); if (!ka) return; const p = all.find(x => x.key === ka.value); const keep = p && p.key === f.kosul?.alan ? f.kosul.degerler : [];
     q('#fe-kos-hint').textContent = p ? `"${p.ad}" alanında aşağıdakilerden biri seçildiğinde bu alan formda açılır.` : 'Bağlanabilecek liste alanı yok.';
-    q('#fe-akts').innerHTML = (p?.secenekler || []).map(a => `<label class="check"><input type="checkbox" value="${esc(a)}"${keep.includes(a) ? ' checked' : ''}> ${esc(a)}</label>`).join(''); };
-  const upd = () => { q('#fe-sec-wrap').hidden = q('#fe-tip').value !== 'liste'; q('#fe-rap-wrap').hidden = q('#fe-tip').value !== 'sayi'; const g = q('#fe-gor'); if (g) q('#fe-kos').style.display = g.value === 'sec' ? 'grid' : 'none'; };
+    q('#fe-akts').innerHTML = (p?.key === 'raporlayan' ? RAP : (p?.secenekler || [])).map(a => `<label class="check"><input type="checkbox" value="${esc(a)}"${keep.includes(a) ? ' checked' : ''}> ${esc(a)}</label>`).join(''); };
+  const upd = () => { q('#fe-sec-wrap').hidden = q('#fe-tip').value !== 'liste' || f.key === 'raporlayan'; q('#fe-rap-wrap').hidden = q('#fe-tip').value !== 'sayi'; const g = q('#fe-gor'); if (g) q('#fe-kos').style.display = g.value === 'sec' ? 'grid' : 'none'; };
   q('#fe-tip').addEventListener('change', upd); q('#fe-gor')?.addEventListener('change', upd); q('#fe-kalan')?.addEventListener('change', checks); checks(); upd();
   fm.addEventListener('submit', async e => { e.preventDefault(); const m = q('#fe-msg');
     const ad = q('#fe-ad').value.trim(); if (!ad) return m.textContent = 'Alan adı girin.';
     if (F().some((x, j) => j !== i && tru(x.ad) === tru(ad))) return m.textContent = 'Bu adla başka bir alan var.';
     const tip = f.sistem ? f.tip : q('#fe-tip').value;
     const sec = uniq(q('#fe-sec').value.split('\n').map(x => x.trim()));
-    if (tip === 'liste' && !sec.length) return m.textContent = 'Liste türü için en az bir seçenek girin.';
+    if (tip === 'liste' && !sec.length && f.key !== 'raporlayan') return m.textContent = 'Liste türü için en az bir seçenek girin.';
     let kosul = null; const g = q('#fe-gor');
     if (g && g.value === 'sec') { const alan = q('#fe-kalan')?.value; if (!alan) return m.textContent = 'Bağlanacak alanı seçin.'; const d = [...fm.querySelectorAll('#fe-akts input:checked')].map(x => x.value); if (!d.length) return m.textContent = 'Alanın açılacağı en az bir seçeneği işaretleyin.'; kosul = { alan, degerler:d }; }
     const nf = { ...f, ad, tip, secenekler: tip === 'liste' ? sec : [], yer:q('#fe-yer').value.trim(), zorunlu:q('#fe-zor').checked, kosul, rapor: tip === 'sayi' ? (q('#fe-rap').value || 'aktivite') : '' };
@@ -1687,6 +1690,7 @@ function loginOk(h, silent){
 function watchUsers(){
   AUTH.usersUnsub = S.db.collection('kullanicilar').onSnapshot(snap => {
     AUTH.users = Object.fromEntries(snap.docs.map(d => [d.id, { uid:d.id, ...d.data() }]));
+    RAP = uniq(Object.values(AUTH.users).filter(u => u.aktif === true).map(u => tru(u.ad))).sort((a, b) => a.localeCompare(b, 'tr')); applyFields(); render();
     const me = AUTH.me && AUTH.users[AUTH.me.uid];
     if (AUTH.me && (!me || me.aktif !== true)) return logout('Hesabınız pasifleştirildi veya silindi.');
     if (AUTH.me && me.rol !== AUTH.me.rol) loginOk({ ...AUTH.me, ...me }, true);
@@ -1696,7 +1700,7 @@ function watchUsers(){
 function stopApp(){
   AUTH.me = null; S.isAdmin = false; S.meId = null; S.files = null;
   S.unsub.forEach(u => { try { u(); } catch {} }); S.unsub = []; S.subscribed = false; S.months = {}; S._ac = null; S._dofsRaw = []; S._dc = null; S._czRaw = []; S._zc = null; S._kazRaw = []; S._kc = null;
-  if (AUTH.usersUnsub) { try { AUTH.usersUnsub(); } catch {} AUTH.usersUnsub = null; } AUTH.users = {};
+  if (AUTH.usersUnsub) { try { AUTH.usersUnsub(); } catch {} AUTH.usersUnsub = null; } AUTH.users = {}; RAP = []; applyFields();
   $('#layer').innerHTML = '';
 }
 function logout(msg){ AUTH.flash = msg || ''; stopApp(); FB.auth.signOut(); }
@@ -1713,6 +1717,7 @@ function rKullanici(){
       const ad = $('#u-ad').value.trim(), email = $('#u-mail').value.trim().toLowerCase(), rol = $('#u-rol').value, pw = $('#u-pw').value.trim();
       if (!ad || !okMail(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
       if (Object.values(AUTH.users).some(h => h.email === email)) return m.textContent = 'Bu e-posta ile bir kullanıcı zaten var.';
+      if (Object.values(AUTH.users).some(h => tru(h.ad) === tru(ad))) return m.textContent = 'Bu adla bir kullanıcı zaten var. Raporlayan listesinde karışmaması için ad soyadı ayırt edici yazın.';
       if (!pwRule(pw)) { $('#u-pw').value = genPw(); return m.textContent = 'Yeni geçici şifre üretildi, tekrar deneyin.'; }
       busy(btn, m, 'Kullanıcı oluşturuluyor…');
       try {
