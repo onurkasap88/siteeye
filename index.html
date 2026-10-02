@@ -1,3 +1,104 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; connect-src 'self' https://*.googleapis.com https://firebasestorage.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 26'%3E%3Cpath d='M1 13 L11 3 H23 L33 13 L23 23 H11 Z' fill='%23961937'/%3E%3Ccircle cx='17' cy='13' r='5.2' fill='%23fffae4'/%3E%3C/svg%3E">
+<script src="config.js"></script>
+<script type="module">
+/* Firebase bağlantı katmanı: uygulamanın geri kalanı yalnızca window.FB üzerinden konuşur */
+import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import { getAuth, setPersistence, browserSessionPersistence, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, getMultiFactorResolver, TotpMultiFactorGenerator, multiFactor, sendEmailVerification, reload, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import { getFirestore, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { getStorage, ref, uploadBytes, getDownloadURL, getBlob } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
+
+const C = window.SITEEYE_CONFIG || {};
+const cfg = C.firebase || {};
+const TR = {
+  'auth/invalid-credential':'E-posta veya şifre hatalı.', 'auth/wrong-password':'E-posta veya şifre hatalı.', 'auth/user-not-found':'E-posta veya şifre hatalı.', 'auth/invalid-login-credentials':'E-posta veya şifre hatalı.',
+  'auth/invalid-email':'Geçerli bir e-posta girin.', 'auth/missing-password':'Şifrenizi girin.', 'auth/too-many-requests':'Çok fazla deneme yapıldı. Birkaç dakika sonra tekrar deneyin.',
+  'auth/user-disabled':'Bu hesap devre dışı bırakılmış.', 'auth/invalid-verification-code':'Authenticator kodu hatalı.', 'auth/missing-code':'Authenticator kodunu girin.',
+  'auth/totp-challenge-timeout':'Kodun girilme süresi doldu; yeniden giriş yapın.', 'auth/requires-recent-login':'Güvenlik için çıkış yapıp yeniden giriş yapın, sonra tekrar deneyin.',
+  'auth/email-already-in-use':'Bu e-posta Firebase\'de zaten kayıtlı.', 'auth/weak-password':'Şifre çok zayıf.', 'auth/network-request-failed':'İnternet bağlantısı yok veya sunucuya ulaşılamadı.',
+  'auth/unverified-email':'Önce e-posta adresinizi doğrulayın.', 'auth/operation-not-allowed':'Bu işlem Firebase projesinde açılmamış (KURULUM adımlarını kontrol edin: E-posta/Şifre girişi ve TOTP).',
+  'auth/admin-restricted-operation':'Bu işlem Firebase projesinde kapalı (KURULUM adımlarını kontrol edin).', 'auth/maximum-second-factor-count-exceeded':'En fazla sayıda authenticator tanımlı.',
+  'auth/second-factor-already-in-use':'Bu authenticator zaten tanımlı.', 'auth/unauthorized-domain':'Bu adres Firebase\'de yetkili alan olarak eklenmemiş (Authentication → Ayarlar → Yetkili alanlar).',
+  'auth/quota-exceeded':'Firebase günlük e-posta/giriş kotası doldu; daha sonra deneyin.', 'auth/invalid-api-key':'Firebase ayarlarındaki apiKey hatalı.',
+  'permission-denied':'Bu işlem için yetkiniz yok.', 'unavailable':'Sunucuya ulaşılamadı; internet bağlantınızı kontrol edin.', 'resource-exhausted':'Firebase kotası doldu; biraz sonra tekrar deneyin.',
+  'not-found':'Kayıt bulunamadı.', 'unauthenticated':'Oturumunuz kapanmış; yeniden giriş yapın.',
+  'storage/unauthorized':'Dosya yükleme veya görüntüleme yetkiniz yok.', 'storage/quota-exceeded':'Fotoğraf depolama kotası doldu.', 'storage/object-not-found':'Dosya bulunamadı.',
+  'storage/retry-limit-exceeded':'Yükleme zaman aşımına uğradı; bağlantınızı kontrol edin.', 'storage/canceled':'Yükleme iptal edildi.', 'storage/unauthenticated':'Oturumunuz kapanmış; yeniden giriş yapın.'
+};
+const err = e => { const code = String(e?.code || '').replace(/^firestore\//, ''); const x = new Error(TR[code] || (code ? 'Hata: ' + code : (e?.message || 'Bilinmeyen hata'))); x.code = code; return x; };
+const W = p => Promise.resolve(p).catch(e => { throw err(e); });
+
+if (!cfg.apiKey || !cfg.projectId) {
+  window.FB = { configured:false };
+} else {
+  const app = initializeApp(cfg);
+  const auth = getAuth(app); auth.languageCode = 'tr';
+  await setPersistence(auth, browserSessionPersistence).catch(() => {});
+  const fs = getFirestore(app);
+  const st = getStorage(app);
+
+  /* Veritabanı: uygulamanın beklediği basit doc/collection arayüzü */
+  const snapD = s => ({ id:s.id, exists:s.exists(), data:() => s.data() });
+  const wrapDoc = path => ({ id:path.split('/').pop(), path,
+    get: async () => snapD(await W(getDoc(doc(fs, path)))),
+    set: d => W(setDoc(doc(fs, path), d)),
+    update: d => W(updateDoc(doc(fs, path), d)),
+    delete: () => W(deleteDoc(doc(fs, path))),
+    onSnapshot: (fn, onErr) => onSnapshot(doc(fs, path), s => fn(snapD(s)), e => onErr && onErr(err(e))) });
+  const coll = (path, cons = []) => {
+    const q = () => query(collection(fs, path), ...cons);
+    return {
+      where: (f, op, v) => coll(path, [...cons, where(f, op, v)]),
+      doc: id => wrapDoc(path + '/' + (id || doc(collection(fs, path)).id)),
+      get: async () => ({ docs:(await W(getDocs(q()))).docs.map(snapD) }),
+      onSnapshot: (fn, onErr) => onSnapshot(q(), s => fn({ docs:s.docs.map(snapD) }), e => onErr && onErr(err(e)))
+    };
+  };
+  const db = { doc:wrapDoc, collection:p => coll(p) };
+
+  /* Dosyalar: her dosya dosya/<32 hex> yolunda; kayıtlarda yalnızca kimliği saklanır */
+  const rndId = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+  const urlCache = new Map();
+  const files = {
+    async upload(blob, opt = {}){ const id = /^[0-9a-f]{32}$/.test(opt.id || '') ? opt.id : rndId(); await W(uploadBytes(ref(st, 'dosya/' + id), blob, { contentType: opt.type || blob.type || 'application/octet-stream', cacheControl:'private, max-age=86400' })); return { id }; },
+    url(id){ if (!urlCache.has(id)) urlCache.set(id, getDownloadURL(ref(st, 'dosya/' + id)).catch(e => { urlCache.delete(id); throw err(e); })); return urlCache.get(id); },
+    blob: id => W(getBlob(ref(st, 'dosya/' + id)))
+  };
+
+  /* Kimlik doğrulama: e-posta + şifre, ardından TOTP (authenticator) ikinci adım */
+  const info = u => ({ uid:u.uid, email:String(u.email || '').toLowerCase(), verified:!!u.emailVerified, factors:multiFactor(u).enrolledFactors.length });
+  let resolver = null, pendingTotp = null;
+  const totpAssert = (r, code) => { const h = r.hints.find(x => x.factorId === TotpMultiFactorGenerator.FACTOR_ID) || r.hints[0]; return r.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(h.uid, String(code || '').replace(/\D/g, ''))); };
+  const A = {
+    onChange: cb => onAuthStateChanged(auth, u => cb(u ? info(u) : null)),
+    current: () => auth.currentUser ? info(auth.currentUser) : null,
+    async signIn(email, pw){ try { resolver = null; await signInWithEmailAndPassword(auth, email, pw); return { mfa:false }; } catch (e) { if (e?.code === 'auth/multi-factor-auth-required') { resolver = getMultiFactorResolver(auth, e); return { mfa:true }; } throw err(e); } },
+    async code(c){ if (!resolver) throw err({ code:'auth/totp-challenge-timeout' }); try { await totpAssert(resolver, c); resolver = null; } catch (e) { throw err(e); } },
+    create: (email, pw) => W(createUserWithEmailAndPassword(auth, email, pw)),
+    sendVerify: () => W(sendEmailVerification(auth.currentUser)),
+    async reload(){ await W(reload(auth.currentUser)); await auth.currentUser.getIdToken(true).catch(() => {}); return info(auth.currentUser); },
+    async secondFactor(){ const r = await W(auth.currentUser.getIdTokenResult()); return r.claims?.firebase?.sign_in_second_factor === 'totp'; },
+    async reauth(pw, code){ try { await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, pw)); }
+      catch (e) { if (e?.code !== 'auth/multi-factor-auth-required') throw err(e); if (!String(code || '').trim()) throw err({ code:'auth/missing-code' }); try { await totpAssert(getMultiFactorResolver(auth, e), code); } catch (e2) { throw err(e2); } } },
+    setPassword: pw => W(updatePassword(auth.currentUser, pw)),
+    async totpStart(){ try { const s = await multiFactor(auth.currentUser).getSession(); pendingTotp = await TotpMultiFactorGenerator.generateSecret(s); return { key:pendingTotp.secretKey, uri:pendingTotp.generateQrCodeUrl(auth.currentUser.email, 'SiteEye') }; } catch (e) { throw err(e); } },
+    async totpFinish(code){ if (!pendingTotp) throw err({ code:'auth/totp-challenge-timeout' }); await W(multiFactor(auth.currentUser).enroll(TotpMultiFactorGenerator.assertionForEnrollment(pendingTotp, String(code || '').replace(/\D/g, '')), 'SiteEye')); pendingTotp = null; },
+    async totpRemove(){ const m = multiFactor(auth.currentUser); for (const f of [...m.enrolledFactors]) await W(m.unenroll(f)); },
+    signOut: () => signOut(auth).catch(() => {}),
+    /* Yönetici yeni kullanıcı açar: ayrı bir Firebase örneğiyle, yöneticinin oturumu bozulmadan */
+    async adminCreate(email, pw){ const a2 = initializeApp(cfg, 'yeni-' + Date.now()); try { const a2auth = getAuth(a2); a2auth.languageCode = 'tr'; await setPersistence(a2auth, inMemoryPersistence); const cr = await createUserWithEmailAndPassword(a2auth, email, pw); try { await sendEmailVerification(cr.user); } catch {} await signOut(a2auth); return cr.user.uid; } catch (e) { throw err(e); } finally { deleteApp(a2).catch(() => {}); } },
+    resetMail: email => W(sendPasswordResetEmail(auth, email))
+  };
+  window.FB = { configured:true, db, files, auth:A, adminEmail:String(C.ilkYonetici || '').trim().toLowerCase() };
+}
+window.dispatchEvent(new Event('fb-ready'));
+</script>
 <title>SiteEye</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -207,6 +308,8 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
 @media (prefers-reduced-motion:no-preference){.btn,.hbar .fill{transition:all .15s}}
 @media (max-width:560px){.kpi .v{font-size:1.6rem} th,td{padding:7px 8px}}
 </style>
+</head>
+<body>
 
 <header class="top">
   <div class="wrap">
@@ -229,7 +332,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
   <!-- KULLANICILAR -->
   <section class="view" id="v-kullanici" hidden>
     <div class="panel">
-      <header><h2>Kullanıcı ekle</h2><span class="muted" style="font-size:.85rem">Kullanıcı ilk girişte şifresini değiştirir ve kendi authenticator'ını tanımlar</span></header>
+      <header><h2>Kullanıcı ekle</h2><span class="muted" style="font-size:.85rem">Kullanıcı ilk girişte e-postasını doğrular, şifresini değiştirir ve kendi authenticator'ını tanımlar</span></header>
       <form class="f" id="f-user" novalidate>
         <div class="fld"><label for="u-ad">Ad soyad</label><input id="u-ad" autocomplete="off"></div>
         <div class="fld"><label for="u-mail">E-posta</label><input id="u-mail" type="email" autocomplete="off"></div>
@@ -239,8 +342,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
       </form>
       <div id="u-cred" style="margin-top:12px"></div>
     </div>
-    <div class="panel" id="u-pending" hidden></div>
-    <div class="bar"><h2 class="grow">Kullanıcılar</h2><span class="muted" id="u-count"></span></div>
+        <div class="bar"><h2 class="grow">Kullanıcılar</h2><span class="muted" id="u-count"></span></div>
     <div class="tablewrap"><table id="u-table"></table></div>
   </section>
 
@@ -263,7 +365,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
           <div class="fld"><label for="t-code">Mevcut authenticator kodu</label><input id="t-code" class="mono" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
           <div class="actions"><button class="btn" type="submit">Yeni authenticator tanımla</button><span class="err" id="t-msg"></span></div>
         </form>
-        <p class="muted" style="margin:12px 0 0;font-size:.85rem">Eski telefonunuz elinizde değilse yöneticinizden şifre sıfırlaması isteyin; yeniden girişte yeni authenticator tanımlarsınız.</p></div>
+        <p class="muted" style="margin:12px 0 0;font-size:.85rem">Mevcut kodla doğruladıktan sonra eski authenticator kaldırılır ve yeniden girişte yeni QR kod gösterilir. Eski telefonunuz elinizde değilse yöneticiniz Firebase konsolundan hesabınızı sıfırlamalıdır.</p></div>
     </div>
   </section>
 
@@ -366,6 +468,13 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
       <div class="bar"><input type="file" id="imp-file" accept=".xlsx,.xlsm"><button class="btn primary" id="imp-go" disabled>İçe aktar</button></div>
       <p class="muted" id="imp-msg" style="font-size:.88rem"></p>
       <div class="progress" id="imp-prog" hidden><div></div></div>
+    </div>
+    <div class="panel">
+      <header><h2>Yedek</h2></header>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">Tüm aktivite, DÖF, kaza, ceza kayıtlarını ve ayarları tek bir JSON dosyasına yedekleyin veya bir yedekten geri yükleyin. Eski (claude.ai) sürümden taşınan veriler de buradan yüklenir.</p>
+      <div class="bar"><button class="btn" id="yd-al" type="button">Yedek al (JSON)</button><input type="file" id="yd-file" accept=".json,application/json"><button class="btn primary" id="yd-go" type="button" disabled>Yedekten yükle</button></div>
+      <p class="muted" id="yd-msg" style="font-size:.88rem"></p>
+      <div class="progress" id="yd-prog" hidden><div></div></div>
     </div>
   </section>
 </main>
@@ -470,7 +579,13 @@ function riskOf(o, s){ const p = (Number(o)||0) * (Number(s)||0); if (!p) return
 const RISK_TXT = {'Çok yüksek':'Çok Yüksek Risk / Acil Önlem Alınmalı','Yüksek':'Yüksek Risk / Kısa Süre İçinde Risk Azaltılmalı','Orta':'Orta Seviye Risk / Risk Değerlendirilmeli ve Azaltılmalı','Düşük':'Düşük Risk / Tolere Edilebilir, Makul Süre İçinde Risk Azaltılmalı'};
 /* Güvenlik: veritabanından gelen her kayıt ekrana basılmadan önce temizlenir */
 const bid = v => (typeof v === 'string' && /^[0-9a-f]{32}$/.test(v)) ? v : null;
-const blobUrl = id => bid(id) ? '/_blob/' + id : '';
+/* Fotoğraflar Firebase Storage'da: <img> önce boş yer tutucuyla basılır, adres arka planda alınıp yerleştirilir */
+const PIX = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', URLC = new Map();
+const blobUrl = id => bid(id) ? (URLC.get(id) || PIX + '#f=' + id) : '';
+function hydrate(root){ (root.querySelectorAll ? root.querySelectorAll('img') : []).forEach(img => { const s = img.getAttribute('src') || ''; if (!s.startsWith(PIX + '#f=') || img._h) return; const id = bid(s.slice(PIX.length + 3)); if (!id || !S.files) return; img._h = 1;
+  S.files.url(id).then(u => { URLC.set(id, u); img.src = u; }).catch(() => { img.alt = 'Fotoğraf yüklenemedi'; img.classList.add('broken'); }); }); }
+new MutationObserver(ms => { for (const m of ms) m.addedNodes.forEach(n => { if (n.nodeType === 1) { if (n.tagName === 'IMG') hydrate(n.parentNode || n); else hydrate(n); } }); }).observe(document.documentElement, { childList:true, subtree:true });
+const fileBlob = id => { if (!bid(id) || !S.files) return Promise.reject(new Error('Dosya yok')); return S.files.blob(id); };
 const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const NUMK = new Set(['yil','ay','hafta','haftaYil','adet','kayipGun','olasilik','siddet','sifirlaSurumu','tutar','yansitmaTutar','katilimci']);
 function clean(r){
@@ -494,7 +609,7 @@ const uniq = a => [...new Set(a.filter(Boolean))];
 const today = new Date();
 const cw = isoWeek(today);
 const S = {
-  db:null, assets:null, downloads:null, user:null, meId:null, isEditor:false, canWrite:true, ready:false,
+  db:null, files:null, meId:null, canWrite:true, ready:false,
   cfg:{...DEF}, months:{}, dofs:[], kazalar:[], yil:cw.y, hafta:cw.w, tab:'aktivite', unsub:[], names:{}
 };
 const acts = () => S._ac || (S._ac = Object.values(S.months).flat().map(clean).filter(Boolean).map(r => normAkt(withAlt(withLok(r)))).filter(Boolean));
@@ -549,7 +664,7 @@ function bindDrop(root){
     dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
     dz.addEventListener('dragleave', () => dz.classList.remove('over'));
     dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); pending[id].push(...[...e.dataTransfer.files].filter(f => f.type.startsWith('image/'))); draw(); });
-    if (!S.assets) dz.querySelector('.hint').textContent = S.db ? 'Fotoğraf yüklemek için bu sayfada düzenleme yetkiniz olmalı.' : 'Fotoğraf yükleme, sayfa Claude içinde açıldığında çalışır.';
+    if (!S.files) dz.querySelector('.hint').textContent = 'Fotoğraf yüklemek için giriş yapmış olmalısınız.';
     draw();
   });
 }
@@ -565,12 +680,12 @@ async function compress(file){
 async function uploadAll(id, msgEl){
   const files = pending[id] || []; const ids = [];
   if (!files.length) return ids;
-  if (!S.assets) throw new Error('Fotoğraf yükleme yetkiniz yok; kaydı fotoğrafsız kaydetmek için fotoğrafları kaldırın.');
+  if (!S.files) throw new Error('Fotoğraf yükleme yetkiniz yok; kaydı fotoğrafsız kaydetmek için fotoğrafları kaldırın.');
   for (let i = 0; i < files.length; i++) {
     msgEl.textContent = `Fotoğraf yükleniyor ${i+1}/${files.length}…`;
     const small = await compress(files[i]);
-    try { const r = await S.assets.upload(small || files[i], { type: small ? 'image/jpeg' : (files[i].type || 'image/jpeg') }); ids.push(r.id); }
-    catch (e) { throw new Error(e?.code === 'quota_exceeded' ? 'Fotoğraf depolama alanı doldu. Eski fotoğrafları silin.' : e?.code === 'too_large' ? 'Fotoğraf 20 MB sınırını aşıyor.' : 'Fotoğraf yüklenemedi: ' + (e?.message || e?.code || 'bilinmeyen hata')); }
+    try { const r = await S.files.upload(small || files[i], { type: small ? 'image/jpeg' : (files[i].type || 'image/jpeg') }); ids.push(r.id); }
+    catch (e) { throw new Error('Fotoğraf yüklenemedi: ' + (e?.message || 'bilinmeyen hata')); }
   }
   return ids;
 }
@@ -585,14 +700,15 @@ function lightbox(id, cap, fname){
   const im = document.createElement('img'); im.src = blobUrl(id); im.alt = ''; L.prepend(im); L.querySelector('.cap').textContent = cap;
   L.addEventListener('click', async e => {
     if (e.target === L || e.target.closest('[data-x]')) L.remove();
-    if (e.target.closest('[data-dl]')) { try { const b = await (await fetch(blobUrl(id))).blob(); await saveFile(fname, b); } catch { toast('Fotoğraf indirilemedi'); } }
+    if (e.target.closest('[data-dl]')) { try { const b = await fileBlob(id); await saveFile(fname, b); } catch { toast('Fotoğraf indirilemedi'); } }
   });
   document.body.appendChild(L);
 }
+const MIME = { xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', zip:'application/zip', json:'application/json', pdf:'application/pdf', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png' };
 async function saveFile(filename, data){
-  if (!S.downloads) { toast('İndirme bu görünümde kullanılamıyor'); return false; }
-  try { await S.downloads.save({ filename, data }); return true; }
-  catch (e) { if (e?.code !== 'declined') toast('Dosya kaydedilemedi: ' + (e?.code || 'hata')); return false; }
+  try { const blob = data instanceof Blob ? data : new Blob([data], { type: MIME[String(filename).split('.').pop().toLowerCase()] || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); return true; }
+  catch (e) { toast('Dosya kaydedilemedi'); return false; }
 }
 
 /* ---------- AKTİVİTE ---------- */
@@ -646,7 +762,7 @@ async function saveAkt(e){
   for (const f of vis) { if (!f.zorunlu) continue;
     const empty = f.tip === 'foto' ? !(pending['a-' + f.key] || []).length : !String(document.getElementById('a-' + f.key)?.value || '').trim();
     if (empty) { msg.textContent = `${f.ad} zorunlu.`; return; } }
-  if (!S.db) { msg.textContent = 'Kayıt için sayfayı Claude içinde, oturum açarak açın.'; return; }
+  if (!S.db) { msg.textContent = 'Kayıt için giriş yapın.'; return; }
   btn.disabled = true;
   try {
     const d = parseD(tarih), iw = isoWeek(d);
@@ -721,7 +837,7 @@ function openCeza(id, tip){
     try {
       const belge = [...(v.belge || []), ...await uploadAll('c-belge', m)];
       let belgePdfId = bid(v.belgePdfId) || '', belgePdfAd = v.belgePdfAd || '';
-      if (pdf) { if (!S.assets) throw new Error('Belge yükleme yetkiniz yok.'); m.textContent = 'PDF yükleniyor…'; const r = await S.assets.upload(pdf, { type:'application/pdf' }); belgePdfId = r.id; belgePdfAd = pdf.name.slice(0, 120); }
+      if (pdf) { if (!S.files) throw new Error('Belge yükleme yetkiniz yok.'); m.textContent = 'PDF yükleniyor…'; const r = await S.files.upload(pdf, { type:'application/pdf' }); belgePdfId = r.id; belgePdfAd = pdf.name.slice(0, 120); }
       const d = parseD(tarih);
       const rec = { tip:t, tarih, yil:d.getFullYear(), ay:d.getMonth() + 1, lokasyon:g('#c-lok'), proje:g('#c-proje').trim(), aciklama:g('#c-acik').trim(), belgeNot:g('#c-belgenot').trim(), belge, belgePdfId, belgePdfAd,
         tutar: num(g('#c-tutar')),
@@ -734,7 +850,7 @@ function openCeza(id, tip){
     } catch (err) { m.textContent = err.message || ('Kaydedilemedi: ' + (err.code || '')); btn.disabled = false; }
   });
 }
-document.addEventListener('click', async e => { const a = e.target.closest('[data-czpdf]'); if (!a) return; e.preventDefault(); const id = bid(a.dataset.czpdf); if (!id) return; try { const b = await (await fetch(blobUrl(id))).blob(); await saveFile(a.dataset.czpdfad || 'belge.pdf', b); } catch { toast('Belge indirilemedi'); } });
+document.addEventListener('click', async e => { const a = e.target.closest('[data-czpdf]'); if (!a) return; e.preventDefault(); const id = bid(a.dataset.czpdf); if (!id) return; try { const b = await fileBlob(id); await saveFile(a.dataset.czpdfad || 'belge.pdf', b); } catch { toast('Belge indirilemedi'); } });
 
 function rDof(){
   const lk = $('#dof-lok').value; $('#dof-lok').innerHTML = opts(S.cfg.lokasyonlar, lk, 'Tüm lokasyonlar');
@@ -938,7 +1054,7 @@ document.addEventListener('click', async e => { const b = e.target.closest('[dat
 /* ---------- FOTOĞRAFLAR ---------- */
 /* Fotoğraf klasörleri: her klasör = denetim tarihi · yapan kişi · lokasyon · alt yüklenici */
 S.phRange = S.phRange || presetRange('buhafta');
-const hesapAd = email => Object.values(AUTH.hesaplar).find(h => h.email === email)?.ad || '';
+const hesapAd = email => Object.values(AUTH.users).find(h => h.email === email)?.ad || '';
 const safeName = t => String(t).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
 function photoFolders(){
   const { from, to } = S.phRange, inR = t => !!t && t >= from && t <= to, F = {};
@@ -984,7 +1100,7 @@ $('#ph-zip').addEventListener('click', async () => {
   const all = photoFolders(), folders = S.phOpen ? all.filter(f => f.key === S.phOpen) : all, btn = $('#ph-zip');
   if (!window.JSZip) { toast('ZIP kütüphanesi yüklenemedi'); return; }
   const n = folders.reduce((s,f) => s + f.items.length, 0); btn.disabled = true; const zip = new JSZip(); let ok = 0, k = 0;
-  for (const f of folders) { const dir = zip.folder(safeName(f.name.replace(/ · /g, ' - '))); for (const [i, x] of f.items.entries()) { btn.textContent = `Hazırlanıyor ${++k}/${n}`; try { const b = await (await fetch(blobUrl(x.id))).blob(); dir.file(photoFile(f, x, i), b); ok++; } catch {} } }
+  for (const f of folders) { const dir = zip.folder(safeName(f.name.replace(/ · /g, ' - '))); for (const [i, x] of f.items.entries()) { btn.textContent = `Hazırlanıyor ${++k}/${n}`; try { const b = await fileBlob(x.id); dir.file(photoFile(f, x, i), b); ok++; } catch {} } }
   const name = folders.length === 1 ? safeName(folders[0].name.replace(/ · /g, ' - ')) : `SiteEye_FOTO_${S.phRange.from.replace(/-/g,'')}-${S.phRange.to.replace(/-/g,'')}`;
   if (ok) { const data = await zip.generateAsync({ type:'uint8array' }); await saveFile(`${name}.zip`, data); } else toast('Fotoğraflar alınamadı');
   btn.disabled = false; render();
@@ -1291,7 +1407,7 @@ $('#imp-go').addEventListener('click', async () => {
   const protectedRec = r => r && (r.kaynak !== 'excel' || (r.foto||[]).length || (r.kanitFoto||[]).length);
   const jobs = [...IMP.A.filter(([id]) => !protectedRec(existsA.get(id))).map(([id, d]) => ['aktiviteler/' + id, d]), ...IMP.Dd.filter(([id]) => !protectedRec(existsD.get(id))).map(([id, d]) => ['dof/' + id, d])];
   let done = 0, fail = 0, i = 0;
-  const worker = async () => { while (i < jobs.length) { const [p, d] = jobs[i++]; try { await S.db.doc(p).set(d); } catch (e) { if (e?.code === 'resource_exhausted' || e?.code === 'unavailable') { await new Promise(r => setTimeout(r, 1500 + Math.random()*1000)); try { await S.db.doc(p).set(d); } catch { fail++; } } else if (e?.code === 'quota_exceeded') { fail++; i = jobs.length; msg.textContent = 'Veritabanı kotası doldu: ' + (e.message||''); } else fail++; } done++; prog.firstElementChild.style.width = (done / jobs.length * 100) + '%'; if (done % 20 === 0) msg.textContent = `Aktarılıyor ${done}/${jobs.length}…`; } };
+  const worker = async () => { while (i < jobs.length) { const [p, d] = jobs[i++]; try { await S.db.doc(p).set(d); } catch (e) { if (e?.code === 'resource-exhausted' || e?.code === 'unavailable') { await new Promise(r => setTimeout(r, 1500 + Math.random()*1000)); try { await S.db.doc(p).set(d); } catch { fail++; } } else if (e?.code === 'permission-denied') { fail++; i = jobs.length; msg.textContent = e.message; } else fail++; } done++; prog.firstElementChild.style.width = (done / jobs.length * 100) + '%'; if (done % 20 === 0) msg.textContent = `Aktarılıyor ${done}/${jobs.length}…`; } };
   await Promise.all([worker(), worker(), worker()]);
   msg.textContent = `Bitti: ${done - fail} kayıt aktarıldı${fail ? `, ${fail} kayıt aktarılamadı (tekrar deneyin)` : ''}.`;
   btn.disabled = false;
@@ -1300,7 +1416,7 @@ $('#imp-go').addEventListener('click', async () => {
 /* ---------- bağlantı ---------- */
 function subscribe(){
   S.unsub.forEach(u => u()); S.unsub = []; S.months = {};
-  const db = S.db, err = e => { if (e?.code === 'revoked') banner('Bu sayfaya erişiminiz değişti. Sayfayı yenileyin.', true); };
+  const db = S.db, err = e => { if (e?.code === 'permission-denied' && AUTH.me) banner('Kayıtlara erişim izniniz yok veya oturumunuz değişti. Çıkış yapıp yeniden girin.', true); };
   S.unsub.push(db.doc('ayarlar/listeler').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.cfg = { ...DEF, ...(d || {}) }; if (!Array.isArray(S.cfg.firmalar) || !S.cfg.firmalar.length) S.cfg.firmalar = DEF.firmalar; applyFields(); render(); }, err));
   S.unsub.push(db.doc('ayarlar/aktiviteFormu').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.fields = Array.isArray(d?.alanlar) && d.alanlar.length ? d.alanlar : null; applyFields(); render(); }, err));
   for (const yy of [S.yil - 1, S.yil]) for (let m = 1; m <= 12; m++) S.unsub.push(db.collection('aktiviteler').where('donem', '==', `${yy}-${pad(m)}`).onSnapshot(snap => { S.months[`${yy}-${m}`] = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._ac = null; rStatus(); render(); }, err));
@@ -1310,182 +1426,280 @@ function subscribe(){
 }
 function banner(text, warn){ $('#banner').innerHTML = text ? `<div class="banner${warn?' warn':''}">${text}</div>` : ''; }
 
-/* ---------- kullanıcı ve giriş ---------- */
-const AUTH = { me:null, kimlikler:{}, hesaplar:{}, bagRaw:{}, bagList:[], fails:0, lockUntil:0, names:{} };
-const PBKDF2_IT = 600000;
-const ekey = e => String(e || '').trim().toLowerCase().replace(/[^a-z0-9_\-.~:@+]/g, '_');
-const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+/* ---------- yedek al / yedekten yükle (admin) ---------- */
+const YEDEK_KOL = ['aktiviteler','dof','kazalar','cezalar','ayarlar'];
+const YEDEK_ID = /^[A-Za-z0-9_\-]{1,120}$/;
+const YEDEK_TIP = new Set(['image/jpeg','image/png','image/webp','application/pdf']);
+function yedekTemizle(v, d = 0){
+  if (d > 6) return null;
+  if (v == null || typeof v === 'boolean' || typeof v === 'string') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (Array.isArray(v)) return v.slice(0, 500).map(x => yedekTemizle(x, d + 1));
+  if (typeof v === 'object') { const o = {}; for (const [k, x] of Object.entries(v)) { if (BAD_KEYS.has(k) || k.length > 100) continue; o[k] = yedekTemizle(x, d + 1); } return o; }
+  return null;
+}
+$('#yd-al').addEventListener('click', async () => {
+  if (!S.isAdmin) return; const m = $('#yd-msg'), btn = $('#yd-al'); btn.disabled = true; m.textContent = 'Kayıtlar okunuyor…';
+  try {
+    const out = {};
+    for (const c of YEDEK_KOL) { const s = await S.db.collection(c).get(); out[c] = Object.fromEntries(s.docs.map(d => [d.id, d.data()])); }
+    const n = Object.values(out).reduce((t, x) => t + Object.keys(x).length, 0);
+    const data = new TextEncoder().encode(JSON.stringify({ surum:1, kaynak:'SiteEye Firebase', tarih:new Date().toISOString(), koleksiyonlar:out }));
+    if (await saveFile(`SiteEye_yedek_${ymd(new Date()).replace(/-/g, '')}.json`, data)) m.textContent = `${n} kayıt yedeklendi (fotoğraflar hariç; fotoğraflar Firebase Storage'da kalır).`;
+  } catch (err) { m.textContent = 'Yedek alınamadı: ' + err.message; }
+  btn.disabled = false;
+});
+let YD = null;
+$('#yd-file').addEventListener('change', async e => {
+  const file = e.target.files[0], m = $('#yd-msg'); YD = null; $('#yd-go').disabled = true; if (!file) return;
+  try {
+    if (file.size > 60 * 1024 * 1024) throw new Error('Dosya çok büyük.');
+    const j = JSON.parse(await file.text());
+    const K = j && typeof j.koleksiyonlar === 'object' ? j.koleksiyonlar : null; if (!K) throw new Error('Bu dosya bir SiteEye yedeği değil.');
+    const jobs = [];
+    for (const c of YEDEK_KOL) { const docs = K[c]; if (!docs || typeof docs !== 'object') continue;
+      for (const [id, d] of Object.entries(docs)) { if (!YEDEK_ID.test(id) || !d || typeof d !== 'object' || Array.isArray(d)) continue; if (c === 'ayarlar' && !['listeler','aktiviteFormu'].includes(id)) continue; jobs.push([c + '/' + id, yedekTemizle(d)]); } }
+    const files = Object.entries(j.dosyalar && typeof j.dosyalar === 'object' ? j.dosyalar : {}).filter(([id, f]) => bid(id) && f && YEDEK_TIP.has(f.tip) && typeof f.b64 === 'string');
+    YD = { jobs, files };
+    const say = c => jobs.filter(x => x[0].startsWith(c + '/')).length;
+    m.textContent = `Hazır: ${say('aktiviteler')} aktivite, ${say('dof')} DÖF, ${say('kazalar')} kaza, ${say('cezalar')} ceza, ${say('ayarlar')} ayar belgesi${files.length ? `, ${files.length} dosya` : ''}. Aynı kimlikli kayıtların üzerine yazılır.`;
+    $('#yd-go').disabled = !jobs.length && !files.length;
+  } catch (err) { m.textContent = 'Dosya okunamadı: ' + err.message; }
+});
+$('#yd-go').addEventListener('click', async () => {
+  if (!YD || !S.isAdmin) return; const btn = $('#yd-go'), m = $('#yd-msg'), prog = $('#yd-prog'); btn.disabled = true; prog.hidden = false;
+  const total = YD.jobs.length + YD.files.length; let done = 0, fail = 0, skip = 0, i = 0;
+  const tick = () => { done++; prog.firstElementChild.style.width = (done / total * 100) + '%'; if (done % 20 === 0) m.textContent = `Aktarılıyor ${done}/${total}…`; };
+  for (const [id, f] of YD.files) { try { const bin = Uint8Array.from(atob(f.b64), ch => ch.charCodeAt(0)); await S.files.upload(new Blob([bin], { type:f.tip }), { id, type:f.tip }); } catch (err) { if (err.code === 'storage/unauthorized') skip++; else fail++; } tick(); }
+  const worker = async () => { while (i < YD.jobs.length) { const [p, d] = YD.jobs[i++]; try { await S.db.doc(p).set(d); } catch (e) { if (e.code === 'resource-exhausted' || e.code === 'unavailable') { await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000)); try { await S.db.doc(p).set(d); } catch { fail++; } } else fail++; } tick(); } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  m.textContent = `Bitti: ${done - fail - skip} öğe aktarıldı${skip ? `, ${skip} dosya zaten vardı` : ''}${fail ? `, ${fail} öğe aktarılamadı (tekrar deneyin)` : ''}.`;
+  btn.disabled = false;
+});
+
+/* ---------- kullanıcı ve giriş (Firebase Authentication + authenticator) ----------
+   Akış: e-posta + şifre → (ilk girişte) e-posta doğrulama → geçici şifreyi değiştirme → authenticator tanımlama
+   → sonraki girişlerde şifre + 6 haneli kod. Veriye erişimi Firestore kuralları sunucu tarafında denetler:
+   aktif profil + authenticator ile yapılmış giriş olmadan hiçbir kayıt okunamaz. */
+const AUTH = { me:null, users:{}, flash:'', seq:0, usersUnsub:null };
+const CFG = () => window.SITEEYE_CONFIG || {};
 const rnd = n => crypto.getRandomValues(new Uint8Array(n));
-async function pbkdf2(pw, salt, it = 150000){ const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']); return b64(await crypto.subtle.deriveBits({ name:'PBKDF2', salt:unb64(salt), iterations:it, hash:'SHA-256' }, k, 256)); }
-async function makeHash(pw){ const salt = b64(rnd(16)); return { salt, hash: await pbkdf2(pw, salt, PBKDF2_IT), it: PBKDF2_IT }; }
-async function checkHash(pw, salt, hash, it){ return !!(salt && hash && pw) && (await pbkdf2(pw, salt, Number(it) || 150000)) === hash; }
-const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-function b32enc(bytes){ let bits = 0, val = 0, out = ''; for (const b of bytes) { val = (val << 8) | b; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } } if (bits > 0) out += B32[(val << (5 - bits)) & 31]; return out; }
-function b32dec(s){ let bits = 0, val = 0; const out = []; for (const c of String(s).toUpperCase().replace(/[\s=]/g, '')) { const i = B32.indexOf(c); if (i < 0) continue; val = (val << 5) | i; bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } } return new Uint8Array(out); }
-async function totpAt(secret, step){ const key = await crypto.subtle.importKey('raw', b32dec(secret), { name:'HMAC', hash:'SHA-1' }, false, ['sign']); const msg = new ArrayBuffer(8), v = new DataView(msg); v.setUint32(0, Math.floor(step / 4294967296)); v.setUint32(4, step >>> 0); const h = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg)); const o = h[h.length-1] & 15; return String((((h[o] & 127) << 24) | (h[o+1] << 16) | (h[o+2] << 8) | h[o+3]) % 1e6).padStart(6, '0'); }
-/* Kodu cihaz saatine göre center±range adım (30 sn) içinde arar; eşleşen kaymayı döndürür, yoksa null */
-async function findTotp(secret, code, center = 0, range = 2){ code = String(code || '').replace(/\D/g, ''); if (!secret || code.length !== 6) return null; const s = Math.floor(Date.now() / 30000) + center; const order = [0]; for (let i = 1; i <= range; i++) order.push(-i, i); for (const d of order) if (await totpAt(secret, s + d) === code) return center + d; return null; }
-async function checkTotp(secret, code, kayma = 0){ return (await findTotp(secret, code, kayma, 3)) !== null; }
 const clockNow = () => new Date().toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 const pwRule = p => p.length >= 10 && /[a-zçğıöşü]/.test(p) && /[A-ZÇĞİÖŞÜ]/.test(p) && /\d/.test(p);
 const PW_HINT = 'En az 10 karakter; büyük harf, küçük harf ve rakam içermeli.';
 function genPw(){ const U = 'ABCDEFGHJKMNPQRSTUVWXYZ', L = 'abcdefghjkmnpqrstuvwxyz', D = '23456789', A = U + L + D; const r = rnd(14); const c = [U[r[0] % U.length], L[r[1] % L.length], D[r[2] % D.length]]; for (let i = 3; i < 14; i++) c.push(A[r[i] % A.length]); for (let i = c.length - 1; i > 0; i--) { const j = rnd(1)[0] % (i + 1); [c[i], c[j]] = [c[j], c[i]]; } return c.join(''); }
-/* Aynı Claude hesabında birden fazla uygulama hesabı olabilir: kimlik e-postaya göre ayrı saklanır */
-const kimlikRef = email => S.db.collection('data/users/' + S.meId).doc('kimlik_' + ekey(email));
 const fmtTs = v => { const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); };
-const durumOf = h => !h.aktif ? ['Pasif',''] : (h.geciciHash && !(h.uids || []).length) ? ((h.sifirlaSurumu||0) > 0 ? ['Şifre sıfırlandı','warn'] : ['Davet bekliyor','info']) : ['Aktif','ok'];
+const durumOf = h => !h.aktif ? ['Pasif',''] : h.geciciSifre ? ['İlk giriş bekliyor','info'] : ['Aktif','ok'];
 async function copyText(t, btn){ try { await navigator.clipboard.writeText(t); if (btn) { const o = btn.textContent; btn.textContent = 'Kopyalandı'; setTimeout(() => btn.textContent = o, 1500); } } catch { toast('Kopyalanamadı; metni seçip kopyalayın'); } }
+const okMail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 function appVisible(on){
-  $('#tabs').hidden = !on; $('#hdr-user').hidden = !on; 
+  $('#tabs').hidden = !on; $('#hdr-user').hidden = !on;
   document.querySelectorAll('section.view').forEach(s => s.hidden = on ? s.id !== 'v-' + S.tab : s.id !== 'v-auth');
 }
 function authCard(title, body, sub){ return `<div class="panel auth-card"><header><h2>${title}</h2></header>${sub ? `<p class="muted" style="margin:-4px 0 14px">${sub}</p>` : ''}${body}</div>`; }
+const outBtn = '<div class="actions" style="margin-top:14px"><button class="btn" type="button" id="au-out">Giriş ekranına dön</button></div>';
+function bindOut(){ $('#au-out')?.addEventListener('click', () => FB.auth.signOut()); }
+function busy(btn, m, t){ btn.disabled = true; m.textContent = t || 'Kontrol ediliyor…'; }
+function idle(btn, m, t){ btn.disabled = false; m.textContent = t || ''; }
+
 function showAuth(step, ctx = {}){
   appVisible(false);
-  const box = $('#v-auth'); const msgs = { loading:'Yükleniyor…', offline:'Giriş yapmak için sayfayı Claude içinde açın.', nodb:'Kayıtlara ulaşılamadı. Claude hesabınızla oturum açıp sayfayı yeniden açın.', nocrypto:'Bu tarayıcı güvenli giriş için gereken şifreleme özelliğini desteklemiyor. Güncel Chrome, Safari veya Edge kullanın.', notready:'Uygulama henüz kurulmadı. Yönetici ilk girişini yaptıktan sonra size e-posta ve geçici şifre iletilecek.' };
+  const box = $('#v-auth');
+  const msgs = {
+    loading:'Yükleniyor…',
+    noconfig:'Firebase ayarları henüz girilmemiş. config.js dosyasına Firebase proje bilgilerini yapıştırıp index.html ile aynı yere yükleyin (KURULUM.md, adım 5).',
+    nolib:'Giriş servisine ulaşılamadı. İnternet bağlantınızı kontrol edip sayfayı yenileyin.',
+    nocrypto:'Bu tarayıcı güvenli giriş için gereken özellikleri desteklemiyor. Güncel Chrome, Safari veya Edge kullanın.'
+  };
   if (msgs[step]) { box.innerHTML = authCard('SiteEye', `<p class="muted">${msgs[step]}</p>`); return; }
-  if (step === 'bootstrap') {
-    box.innerHTML = authCard('İlk yönetici hesabı', `<form class="f one" id="au-f" novalidate>
-      <div class="fld"><label for="au-ad">Ad soyad</label><input id="au-ad" autocomplete="name"></div>
-      <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username"></div>
-      <div class="fld"><label for="au-pw">Şifre</label><input id="au-pw" type="password" autocomplete="new-password"><span class="hint">${PW_HINT}</span></div>
-      <div class="fld"><label for="au-pw2">Şifre tekrar</label><input id="au-pw2" type="password" autocomplete="new-password"></div>
-      <div class="actions"><button class="btn primary" type="submit">Devam</button><span class="err" id="au-msg"></span></div></form>`, 'Uygulamada henüz kullanıcı yok. Sayfa sahibi olarak ilk admin hesabını siz oluşturuyorsunuz.');
-    $('#au-f').addEventListener('submit', e => { e.preventDefault(); const ad = $('#au-ad').value.trim(), email = $('#au-mail').value.trim().toLowerCase(), pw = $('#au-pw').value; const m = $('#au-msg');
-      if (!ad || !/^\S+@\S+\.\S+$/.test(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
-      if (!pwRule(pw)) return m.textContent = PW_HINT; if (pw !== $('#au-pw2').value) return m.textContent = 'Şifreler aynı değil.';
-      showAuth('totp', { mode:'bootstrap', ad, email, pw }); });
-    return;
-  }
+  if (step === 'msg') { box.innerHTML = authCard(ctx.title || 'SiteEye', `<p>${esc(ctx.text || '')}</p>${outBtn}`); bindOut(); return; }
+
   if (step === 'login') {
-    const pre = ctx.email || ls.get('isg.mail') || Object.keys(AUTH.kimlikler)[0] || '';
+    const flash = ctx.msg || AUTH.flash; AUTH.flash = '';
     box.innerHTML = authCard('Giriş', `<form class="f one" id="au-f" novalidate>
-      <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username" value="${esc(pre)}"></div>
+      <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username" value="${esc(ctx.email || ls.get('isg.mail') || '')}"></div>
       <div class="fld"><label for="au-pw">Şifre</label><input id="au-pw" type="password" autocomplete="current-password"></div>
-      <div class="fld"${AUTH.kimlikler[pre.toLowerCase()] ? '' : ' hidden'} id="au-code-wrap"><label for="au-code">Authenticator kodu</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="mono"><span class="hint">Authenticator uygulamasındaki 6 haneli kod</span></div>
-      <div class="actions"><button class="btn primary" type="submit" id="au-go">Giriş yap</button><span class="err" id="au-msg">${esc(ctx.msg || '')}</span></div>
-      <p class="muted" style="grid-column:1/-1;margin:0;font-size:.85rem">İlk kez giriyorsanız yöneticinin verdiği geçici şifreyi yazın; kod sorulmaz.</p></form>`, 'MTX Projesi İSG kayıt sistemi');
-    $('#au-mail').addEventListener('input', e => { $('#au-code-wrap').hidden = !AUTH.kimlikler[e.target.value.trim().toLowerCase()]; });
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Devam</button><button class="btn" type="button" id="au-forgot">Şifremi unuttum</button><span class="err" id="au-msg">${esc(flash || '')}</span></div>
+      <p class="muted" style="grid-column:1/-1;margin:0;font-size:.85rem">İlk kez giriyorsanız yöneticinin verdiği geçici şifreyi yazın. Authenticator tanımladıysanız bir sonraki adımda 6 haneli kod sorulur.</p></form>`, 'MTX Projesi İSG kayıt sistemi');
+    $('#au-forgot').addEventListener('click', async () => { const email = $('#au-mail').value.trim().toLowerCase(), m = $('#au-msg');
+      if (!okMail(email)) return m.textContent = 'Önce e-posta adresinizi yazın.';
+      try { await FB.auth.resetMail(email); } catch (e) { if (e.code === 'auth/too-many-requests') return m.textContent = e.message; }
+      m.textContent = 'Bu e-posta kayıtlıysa şifre yenileme bağlantısı gönderildi. Gelen kutunuzu (ve gereksiz klasörünü) kontrol edin.'; });
     $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go');
-      try { const L = JSON.parse(localStorage.getItem('isg.kilit') || 'null'); if (L) { AUTH.fails = L.f || 0; AUTH.lockUntil = Math.max(AUTH.lockUntil, L.u || 0); } } catch {}
-      if (Date.now() < AUTH.lockUntil) return m.textContent = `Çok fazla hatalı deneme. ${Math.ceil((AUTH.lockUntil - Date.now())/1000)} sn sonra tekrar deneyin.`;
-      const email = $('#au-mail').value.trim().toLowerCase(), pw = $('#au-pw').value, code = $('#au-code').value;
-      const h = AUTH.hesaplar[ekey(email)];
-      const fail = t => { AUTH.fails++; if (AUTH.fails >= 5) AUTH.lockUntil = Date.now() + (AUTH.fails >= 10 ? 15 : AUTH.fails >= 7 ? 5 : 1) * 60000; try { localStorage.setItem('isg.kilit', JSON.stringify({ f:AUTH.fails, u:AUTH.lockUntil })); } catch {} m.textContent = t; btn.disabled = false; };
-      const okReset = () => { AUTH.fails = 0; AUTH.lockUntil = 0; try { localStorage.removeItem('isg.kilit'); } catch {} };
-      btn.disabled = true; m.textContent = 'Kontrol ediliyor…';
-      if (!h) return fail('E-posta veya şifre hatalı.');
-      if (!h.aktif) return fail('E-posta veya şifre hatalı.');
-      const k = AUTH.kimlikler[email];
-      if (k && k.email === email && (h.sifirlaSurumu||0) <= (k.sifirlaSurumu||0) && await checkHash(pw, k.salt, k.hash, k.it)) {
-        if (!code) { $('#au-code-wrap').hidden = false; btn.disabled = false; return m.textContent = 'Authenticator kodunu girin.'; }
-        const off = await findTotp(k.totp, code, k.kayma || 0, 3);
-        const step = off === null ? null : Math.floor(Date.now() / 30000) + off;
-        if (off !== null && step <= (Number(k.sonAdim) || 0)) return fail('Bu kod daha önce kullanıldı. Telefondaki yeni kodu bekleyip tekrar deneyin.');
-        if (off === null) return fail(`Authenticator kodu hatalı. Telefonda "SiteEye" (eski adıyla "İSG Faaliyet") adına birden fazla kayıt varsa en son eklediğinizi kullanın. Bu cihazın saati: ${clockNow()}`);
-        kimlikRef(email).update({ kayma:off, sonAdim:step }).catch(() => {}); AUTH.kimlikler[email] = { ...k, kayma:off, sonAdim:step };
-        okReset(); ls.set('isg.mail', email);
-        if (!approved(h)) return pendingApproval(h);
-        return loginOk(h);
-      }
-      if (h.geciciHash && await checkHash(pw, h.geciciSalt, h.geciciHash, h.geciciIt)) {
-        if (h.geciciSon && h.geciciSon < new Date().toISOString()) return fail('Geçici şifrenin süresi dolmuş. Yöneticinizden yeni şifre isteyin.');
-        okReset(); ls.set('isg.mail', email); return showAuth('newpw', { mode:'activate', email, h }); }
-      fail('E-posta veya şifre hatalı.');
+      const email = $('#au-mail').value.trim().toLowerCase(), pw = $('#au-pw').value;
+      if (!okMail(email) || !pw) return m.textContent = 'E-posta ve şifrenizi girin.';
+      busy(btn, m);
+      try { ls.set('isg.mail', email); const r = await FB.auth.signIn(email, pw); if (r.mfa) showAuth('code', { email }); }
+      catch (err) { idle(btn, m, err.message); }
     });
     return;
   }
+
+  if (step === 'code') {
+    box.innerHTML = authCard('Authenticator kodu', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-code">6 haneli kod</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="mono"><span class="hint">Telefonunuzdaki Authenticator uygulamasında "SiteEye" kaydının kodu. Bu cihazın saati: ${clockNow()}</span></div>
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Giriş yap</button><button class="btn" type="button" id="au-back">Geri</button><span class="err" id="au-msg"></span></div></form>`, esc(ctx.email || ''));
+    $('#au-code').focus();
+    $('#au-back').addEventListener('click', () => showAuth('login', { email:ctx.email }));
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), c = $('#au-code').value.replace(/\D/g, '');
+      if (c.length !== 6) return m.textContent = '6 haneli kodu girin.';
+      busy(btn, m);
+      try { await FB.auth.code(c); } catch (err) { if (err.code === 'auth/totp-challenge-timeout') return showAuth('login', { email:ctx.email, msg:err.message }); idle(btn, m, err.message); }
+    });
+    return;
+  }
+
+  if (step === 'kurulum') {
+    const adm = FB.adminEmail;
+    box.innerHTML = authCard('İlk yönetici kurulumu', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-ad">Ad soyad</label><input id="au-ad" autocomplete="name"></div>
+      <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username" value="${esc(adm)}" readonly></div>
+      <div class="fld"><label for="au-pw">Şifre</label><input id="au-pw" type="password" autocomplete="new-password"><span class="hint">${PW_HINT}</span></div>
+      <div class="fld"><label for="au-pw2">Şifre tekrar</label><input id="au-pw2" type="password" autocomplete="new-password"></div>
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Hesabı oluştur</button><button class="btn" type="button" id="au-back">Girişe dön</button><span class="err" id="au-msg"></span></div></form>`,
+      'Bu ekran yalnızca bir kez, ilk yönetici için kullanılır. Hesap oluşturulunca e-posta doğrulama ve authenticator adımları gelir.');
+    $('#au-back').addEventListener('click', () => { history.replaceState(null, '', location.pathname + location.search); showAuth('login'); });
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go');
+      const ad = $('#au-ad').value.trim(), pw = $('#au-pw').value;
+      if (!adm) return m.textContent = 'config.js içinde ilkYonetici e-postası tanımlı değil.';
+      if (!ad) return m.textContent = 'Adınızı girin.';
+      if (!pwRule(pw)) return m.textContent = PW_HINT; if (pw !== $('#au-pw2').value) return m.textContent = 'Şifreler aynı değil.';
+      busy(btn, m, 'Oluşturuluyor…');
+      try { ls.set('isg.kurulumAd', ad); await FB.auth.create(adm, pw); history.replaceState(null, '', location.pathname + location.search); }
+      catch (err) { idle(btn, m, err.code === 'auth/email-already-in-use' ? 'Bu e-posta ile hesap zaten oluşturulmuş. "Girişe dön" ile şifrenizle giriş yapın.' : err.message); }
+    });
+    return;
+  }
+
+  if (step === 'verify') {
+    const u = ctx.u;
+    box.innerHTML = authCard('E-posta adresinizi doğrulayın', `<p><b>${esc(u.email)}</b> adresine bir doğrulama bağlantısı gönderildi. E-postadaki bağlantıya tıklayın, sonra aşağıdaki <b>Doğruladım</b> düğmesine basın.</p>
+      <p class="muted" style="font-size:.88rem">E-posta birkaç dakika içinde gelmezse gereksiz (spam) klasörüne bakın veya yeniden gönderin.</p>
+      <div class="actions"><button class="btn primary" type="button" id="au-ok">Doğruladım</button><button class="btn" type="button" id="au-re">Yeniden gönder</button><button class="btn" type="button" id="au-out">Çıkış</button><span class="err" id="au-msg"></span></div>`);
+    bindOut();
+    const k = 'isg.dogrulama.' + u.uid;
+    const send = async (force) => { const m = $('#au-msg'); if (!force && sessionStorage.getItem(k)) return; try { await FB.auth.sendVerify(); try { sessionStorage.setItem(k, '1'); } catch {} if (force) m.textContent = 'Doğrulama e-postası yeniden gönderildi.'; } catch (err) { m.textContent = err.message; } };
+    send(false);
+    $('#au-re').addEventListener('click', () => send(true));
+    $('#au-ok').addEventListener('click', async () => { const m = $('#au-msg'), btn = $('#au-ok'); busy(btn, m);
+      try { const nu = await FB.auth.reload(); if (!nu.verified) return idle(btn, m, 'E-posta henüz doğrulanmamış görünüyor. Bağlantıya tıkladıktan sonra tekrar deneyin.'); route(); }
+      catch (err) { idle(btn, m, err.message); } });
+    return;
+  }
+
+  if (step === 'bootstrapAd') {
+    const u = ctx.u;
+    box.innerHTML = authCard('Yönetici hesabını tamamlayın', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-ad">Ad soyad</label><input id="au-ad" autocomplete="name" value="${esc(ls.get('isg.kurulumAd') || '')}"></div>
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Devam</button><button class="btn" type="button" id="au-out">Çıkış</button><span class="err" id="au-msg"></span></div></form>`, esc(u.email));
+    bindOut();
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), ad = $('#au-ad').value.trim();
+      if (!ad) return m.textContent = 'Adınızı girin.';
+      busy(btn, m, 'Kaydediliyor…');
+      try { const now = new Date().toISOString(); await S.db.doc('kullanicilar/' + u.uid).set({ email:u.email, ad, rol:'admin', aktif:true, geciciSifre:false, olusturan:u.email, olusturma:now }); try { localStorage.removeItem('isg.kurulumAd'); } catch {} route(); }
+      catch (err) { idle(btn, m, err.code === 'permission-denied' ? 'Yönetici hesabı oluşturulamadı: firestore.rules dosyasındaki ilk yönetici e-postası bu e-postayla aynı olmalı ve kurallar yayınlanmış olmalı.' : err.message); }
+    });
+    return;
+  }
+
   if (step === 'newpw') {
+    const u = ctx.u;
     box.innerHTML = authCard('Yeni şifrenizi belirleyin', `<form class="f one" id="au-f" novalidate>
       <div class="fld"><label for="au-pw">Yeni şifre</label><input id="au-pw" type="password" autocomplete="new-password"><span class="hint">${PW_HINT}</span></div>
       <div class="fld"><label for="au-pw2">Yeni şifre tekrar</label><input id="au-pw2" type="password" autocomplete="new-password"></div>
-      <div class="actions"><button class="btn primary" type="submit">Devam</button><button class="btn" type="button" id="au-back">Vazgeç</button><span class="err" id="au-msg"></span></div></form>`, `${esc(ctx.email)} · Geçici şifreniz doğrulandı. Şimdi yalnızca sizin bileceğiniz bir şifre belirleyin.`);
-    $('#au-back').addEventListener('click', () => showAuth('login'));
-    $('#au-f').addEventListener('submit', e => { e.preventDefault(); const pw = $('#au-pw').value, m = $('#au-msg');
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Devam</button><button class="btn" type="button" id="au-out">Çıkış</button><span class="err" id="au-msg"></span></div></form>`, `${esc(u.email)} · Yöneticinin verdiği geçici şifre yerine yalnızca sizin bileceğiniz bir şifre belirleyin.`);
+    bindOut();
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const pw = $('#au-pw').value, m = $('#au-msg'), btn = $('#au-go');
       if (!pwRule(pw)) return m.textContent = PW_HINT; if (pw !== $('#au-pw2').value) return m.textContent = 'Şifreler aynı değil.';
-      showAuth('totp', { ...ctx, pw }); });
+      busy(btn, m, 'Kaydediliyor…');
+      try { await FB.auth.setPassword(pw); await S.db.doc('kullanicilar/' + u.uid).update({ geciciSifre:false }); toast('Şifreniz kaydedildi'); route(); }
+      catch (err) { if (err.code === 'auth/requires-recent-login') { AUTH.flash = 'Güvenlik için geçici şifrenizle yeniden giriş yapın.'; return FB.auth.signOut(); } idle(btn, m, err.message); }
+    });
     return;
   }
+
   if (step === 'totp') {
-    const pk = 'isg.bekleyen.' + ekey(ctx.email) + '.' + (ctx.mode || '');
-    const secret = ctx.secret || ls.get(pk) || b32enc(rnd(20)); ctx.secret = secret; ls.set(pk, secret);
-    const label = encodeURIComponent('SiteEye:' + ctx.email);
-    const uri = `otpauth://totp/${label}?secret=${secret}&issuer=SiteEye&algorithm=SHA1&digits=6&period=30`;
-    box.innerHTML = authCard('Authenticator tanımlayın', `<ol class="steps">
-      <li>Telefonunuzda <b>Google Authenticator</b> veya <b>Microsoft Authenticator</b> uygulamasını açın.</li>
-      <li>"+" ile yeni hesap ekleyip aşağıdaki QR kodu okutun. Okutamazsanız anahtarı elle girin.</li>
-      <li>Uygulamada görünen 6 haneli kodu yazın.</li></ol>
-      <p class="muted" style="margin:-6px 0 12px;font-size:.85rem">Daha önce denediyseniz telefondaki eski "SiteEye" veya "İSG Faaliyet" kayıtlarını silin; bu ekrandaki anahtar siz tamamlayana kadar değişmez. Bu cihazın saati: <span class="mono" id="au-clock">${clockNow()}</span></p>
-      <div class="qrrow"><div class="qr" id="au-qr" aria-label="Authenticator QR kodu"></div>
-      <div class="fld" style="min-width:0;flex:1"><label>Elle giriş anahtarı</label><div class="secret mono" id="au-sec">${secret.replace(/(.{4})/g,'$1 ').trim()}</div><button class="btn sm" type="button" id="au-cp">Anahtarı kopyala</button></div></div>
-      <form class="f one" id="au-f" novalidate style="margin-top:14px">
-      <div class="fld"><label for="au-code">6 haneli kod</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="mono" placeholder="000000"></div>
-      <div class="actions"><button class="btn primary" type="submit" id="au-go">Doğrula ve bitir</button>${ctx.mode === 'renew' ? '<button class="btn" type="button" id="au-back">Vazgeç</button>' : ''}<span class="err" id="au-msg"></span></div></form>`, esc(ctx.email));
-    try { new QRCode($('#au-qr'), { text:uri, width:184, height:184, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M }); } catch { $('#au-qr').innerHTML = '<span class="muted" style="font-size:.8rem;color:#333">QR oluşturulamadı; anahtarı elle girin.</span>'; }
-    $('#au-cp').addEventListener('click', e => copyText(secret, e.target));
-    $('#au-back')?.addEventListener('click', () => { loginOk(AUTH.me, true); go('hesap'); });
-    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go');
-      const kayma = await findTotp(secret, $('#au-code').value, 0, 20);
-      if (kayma === null) return m.textContent = 'Kod doğrulanamadı. Telefonda bu ekrandaki QR ile eklenen (en son) kaydın kodunu yazın; eski "SiteEye" / "İSG Faaliyet" kayıtlarını silip QR\'ı yeniden okutun.';
-      if (Math.abs(kayma) > 2) toast(`Cihaz saati telefonla yaklaşık ${Math.round(Math.abs(kayma)/2)} dk farklı; otomatik düzeltildi`);
-      btn.disabled = true; m.textContent = 'Kaydediliyor…';
-      try {
-        const now = new Date().toISOString();
-        const sonAdim = Math.floor(Date.now() / 30000) + kayma;
-        if (ctx.mode === 'renew') { await kimlikRef(ctx.email).update({ totp:secret, kayma, sonAdim, guncelleme:now }); AUTH.kimlikler[ctx.email] = { ...AUTH.kimlikler[ctx.email], totp:secret, kayma, sonAdim }; try { localStorage.removeItem(pk); } catch {} toast('Authenticator güncellendi'); loginOk(AUTH.me, true); go('hesap'); return; }
-        const { salt, hash, it } = await makeHash(ctx.pw);
-        let h = ctx.h;
-        if (ctx.mode === 'bootstrap') { h = { email:ctx.email, ad:ctx.ad, rol:'admin', aktif:true, sifirlaSurumu:0, uids:[S.meId], olusturma:now, olusturan:ctx.email }; await S.db.doc('hesaplar/' + ekey(ctx.email)).set(h); h = { key:ekey(ctx.email), ...h }; AUTH.hesaplar[h.key] = h; }
-        const kim = { email:ctx.email, salt, hash, it, totp:secret, kayma, sonAdim, sifirlaSurumu:h.sifirlaSurumu || 0, guncelleme:now };
-        await kimlikRef(ctx.email).set(kim); AUTH.kimlikler[ctx.email] = kim; try { localStorage.removeItem(pk); } catch {}
-        if (!approved(h)) return pendingApproval(h);
-        toast('Hesabınız hazır'); loginOk(h);
-      } catch (err) { btn.disabled = false; m.textContent = err?.code === 'not_granted' || err?.code === 'invalid_argument' ? 'Kaydedilemedi: bu işlem için yetkiniz yok.' : 'Kaydedilemedi: ' + (err?.message || err?.code || 'hata'); }
-    });
+    const u = ctx.u;
+    box.innerHTML = authCard('Authenticator tanımlayın', `<p class="muted" id="au-wait">Anahtar hazırlanıyor…</p>`, esc(u.email));
+    FB.auth.totpStart().then(({ key, uri }) => {
+      box.innerHTML = authCard('Authenticator tanımlayın', `<ol class="steps">
+        <li>Telefonunuzda <b>Google Authenticator</b> veya <b>Microsoft Authenticator</b> uygulamasını açın.</li>
+        <li>"+" ile yeni hesap ekleyip aşağıdaki QR kodu okutun. Okutamazsanız anahtarı elle girin.</li>
+        <li>Uygulamada görünen 6 haneli kodu yazın.</li></ol>
+        <p class="muted" style="margin:-6px 0 12px;font-size:.85rem">Telefonda eski bir "SiteEye" kaydı varsa silin; bu ekrandaki QR her açılışta yenilenir. Bu cihazın saati: <span class="mono">${clockNow()}</span></p>
+        <div class="qrrow"><div class="qr" id="au-qr" aria-label="Authenticator QR kodu"></div>
+        <div class="fld" style="min-width:0;flex:1"><label>Elle giriş anahtarı</label><div class="secret mono" id="au-sec">${esc(key.replace(/(.{4})/g, '$1 ').trim())}</div><button class="btn sm" type="button" id="au-cp">Anahtarı kopyala</button></div></div>
+        <form class="f one" id="au-f" novalidate style="margin-top:14px">
+        <div class="fld"><label for="au-code">6 haneli kod</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="mono" placeholder="000000"></div>
+        <div class="actions"><button class="btn primary" type="submit" id="au-go">Doğrula ve bitir</button><button class="btn" type="button" id="au-out">Çıkış</button><span class="err" id="au-msg"></span></div></form>`, esc(u.email));
+      bindOut();
+      try { new QRCode($('#au-qr'), { text:uri, width:184, height:184, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M }); } catch { $('#au-qr').innerHTML = '<span class="muted" style="font-size:.8rem;color:#333">QR oluşturulamadı; anahtarı elle girin.</span>'; }
+      $('#au-cp').addEventListener('click', e => copyText(key, e.target));
+      $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), c = $('#au-code').value.replace(/\D/g, '');
+        if (c.length !== 6) return m.textContent = '6 haneli kodu girin.';
+        busy(btn, m, 'Doğrulanıyor…');
+        try { await FB.auth.totpFinish(c); AUTH.flash = 'Authenticator tanımlandı. Şimdi şifreniz ve authenticator kodunuzla giriş yapın.'; await FB.auth.signOut(); }
+        catch (err) { idle(btn, m, err.code === 'auth/invalid-verification-code' ? 'Kod doğrulanamadı. Telefonda bu ekrandaki QR ile eklenen kaydın güncel kodunu yazın; telefonun saatinin otomatik olduğundan emin olun.' : err.message); }
+      });
+    }).catch(err => { box.innerHTML = authCard('Authenticator tanımlanamadı', `<p>${esc(err.code === 'auth/requires-recent-login' ? 'Güvenlik için çıkış yapıp yeniden giriş yapın.' : err.message)}</p>${outBtn}`); bindOut(); });
+    return;
   }
 }
-/* Her uygulama hesabı, yöneticinin onayladığı Claude hesap(lar)ına bağlıdır; başka biri aynı e-postayla giremez */
-/* baglar/<claudeUid> = { hesaplar: { <anahtar>: { email, talep, sonGiris, zaman } } } — aynı Claude hesabı birden çok uygulama hesabı kullanabilir */
-const bagKey = e => ekey(e).replace(/[^a-z0-9]/g, '_');
-function bagWrite(email, patch){ const cur = { ...(AUTH.bagRaw[S.meId] || {}) }, k = bagKey(email); cur[k] = { ...(cur[k] || {}), email, ...patch }; AUTH.bagRaw[S.meId] = cur; return S.db.doc('baglar/' + S.meId).set({ hesaplar:cur }); }
-const approved = h => Array.isArray(h.uids) && h.uids.includes(S.meId);
-async function pendingApproval(h){
-  if (S.isOwner && h.rol === 'admin') { try { await S.db.doc('hesaplar/' + h.key).update({ uids:[...(Array.isArray(h.uids) ? h.uids : []), S.meId] }); h = { ...h, uids:[...(h.uids || []), S.meId] }; AUTH.hesaplar[h.key] = h; return loginOk(h); } catch {} }
-  bagWrite(h.email, { talep:true, zaman:new Date().toISOString() }).catch(() => {});
-  showAuth('login', { email:h.email, msg:'Hesabınız bu Claude hesabıyla ilk kez kullanılıyor. Yönetici onayından sonra giriş yapabilirsiniz.' });
+
+/* Oturum durumuna göre hangi adımın gösterileceğine karar verir */
+async function route(){
+  const my = ++AUTH.seq;
+  const u = FB.auth.current();
+  if (!u) { stopApp(); return showAuth(location.hash === '#kurulum' ? 'kurulum' : 'login'); }
+  ls.set('isg.mail', u.email);
+  let p = null;
+  try { const s = await S.db.doc('kullanicilar/' + u.uid).get(); p = s.exists ? s.data() : null; }
+  catch (err) { if (my === AUTH.seq) showAuth('msg', { text:'Hesap bilgileriniz okunamadı: ' + err.message }); return; }
+  if (my !== AUTH.seq) return;
+  const isBoot = !!FB.adminEmail && u.email === FB.adminEmail;
+  if (!p && !isBoot) return showAuth('msg', { title:'Hesap tanımlı değil', text:'Bu e-posta için SiteEye kullanıcısı tanımlanmamış veya silinmiş. Yöneticinizle görüşün.' });
+  if (p && p.aktif !== true) return showAuth('msg', { title:'Hesap pasif', text:'Hesabınız yönetici tarafından pasifleştirilmiş.' });
+  if (!u.verified) return showAuth('verify', { u });
+  if (!p) return showAuth('bootstrapAd', { u });
+  if (p.geciciSifre) return showAuth('newpw', { u });
+  if (!u.factors) return showAuth('totp', { u });
+  let mfa = false; try { mfa = await FB.auth.secondFactor(); } catch {}
+  if (my !== AUTH.seq) return;
+  if (!mfa) { AUTH.flash = 'Lütfen şifreniz ve authenticator kodunuzla yeniden giriş yapın.'; return FB.auth.signOut(); }
+  loginOk({ uid:u.uid, ...p, email:u.email });
 }
+
 let lastAct = Date.now();
 ['pointerdown','keydown'].forEach(ev => document.addEventListener(ev, () => { lastAct = Date.now(); }, { passive:true }));
 setInterval(() => { if (AUTH.me && Date.now() - lastAct > 30 * 60000) logout('30 dakika işlem yapılmadığı için oturum kapatıldı.'); }, 60000);
+
 function loginOk(h, silent){
-  AUTH.me = h; S.isAdmin = h.rol === 'admin';
-  try { localStorage.setItem('isg.oturum', JSON.stringify({ uid:S.meId, email:h.email, exp:Date.now() + 8*3600e3 })); } catch {}
-  if (!silent) bagWrite(h.email, { talep:false, sonGiris:new Date().toISOString() }).catch(() => {});
+  const first = !AUTH.me || AUTH.me.uid !== h.uid;
+  AUTH.me = h; S.meId = h.uid; S.isAdmin = h.rol === 'admin'; S.files = FB.files;
+  if (first && !silent) S.db.doc('kullanicilar/' + h.uid).update({ sonGiris:new Date().toISOString() }).catch(() => {});
   $('#hdr-user').innerHTML = `<span class="who"><b>${esc(h.ad || h.email)}</b><span class="pill ${S.isAdmin ? 'info' : ''}">${S.isAdmin ? 'Admin' : 'Kullanıcı'}</span></span><button class="btn sm" data-tab="hesap">Hesabım</button><button class="btn sm" id="logout">Çıkış</button>`;
   $('#logout').onclick = () => logout();
-  if (!S.subscribed) { S.subscribed = true; subscribe(); }
+  if (!S.subscribed) { S.subscribed = true; subscribe(); watchUsers(); }
   if (!TABS.some(t => t[0] === S.tab) || (['ayar','kullanici'].includes(S.tab) && !S.isAdmin)) S.tab = 'aktivite';
   appVisible(true); go(S.tab);
 }
-function logout(msg){ AUTH.me = null; S.isAdmin = false; try { localStorage.removeItem('isg.oturum'); } catch {} $('#layer').innerHTML = ''; showAuth('login', { msg }); }
-function decideAuth(){
-  if (!Object.keys(AUTH.hesaplar).length) return showAuth(S.isOwner ? 'bootstrap' : 'notready');
-  let s = null; try { s = JSON.parse(localStorage.getItem('isg.oturum') || 'null'); } catch {}
-  const h = s && AUTH.hesaplar[ekey(s.email)], k = s && AUTH.kimlikler[s.email];
-  if (s && s.uid === S.meId && s.exp > Date.now() && h && h.aktif && k && k.email === s.email && (h.sifirlaSurumu||0) <= (k.sifirlaSurumu||0) && approved(h)) return loginOk(h, true);
-  showAuth('login');
+function watchUsers(){
+  AUTH.usersUnsub = S.db.collection('kullanicilar').onSnapshot(snap => {
+    AUTH.users = Object.fromEntries(snap.docs.map(d => [d.id, { uid:d.id, ...d.data() }]));
+    const me = AUTH.me && AUTH.users[AUTH.me.uid];
+    if (AUTH.me && (!me || me.aktif !== true)) return logout('Hesabınız pasifleştirildi veya silindi.');
+    if (AUTH.me && me.rol !== AUTH.me.rol) loginOk({ ...AUTH.me, ...me }, true);
+    else if (AUTH.me) { AUTH.me = { ...AUTH.me, ...me }; if (S.tab === 'kullanici' || S.tab === 'hesap') render(); }
+  }, () => {});
 }
-function onHesapChange(){
-  if (!AUTH.me) return;
-  const h = AUTH.hesaplar[ekey(AUTH.me.email)];
-  if (!h || !h.aktif) return logout('Hesabınız pasifleştirildi veya silindi.');
-  if (!approved(h)) return logout('Bu cihaz için erişim onayı kaldırıldı.');
-  if ((h.sifirlaSurumu||0) > (AUTH.kimlikler[AUTH.me.email]?.sifirlaSurumu||0)) return logout('Şifreniz yönetici tarafından sıfırlandı. Yeni geçici şifrenizle girin.');
-  const roleChanged = h.rol !== AUTH.me.rol; AUTH.me = h; S.isAdmin = h.rol === 'admin';
-  if (roleChanged) loginOk(h, true); else render();
+function stopApp(){
+  AUTH.me = null; S.isAdmin = false; S.meId = null; S.files = null;
+  S.unsub.forEach(u => { try { u(); } catch {} }); S.unsub = []; S.subscribed = false; S.months = {}; S._ac = null; S._dofsRaw = []; S._dc = null; S._czRaw = []; S._zc = null; S._kazRaw = []; S._kc = null;
+  if (AUTH.usersUnsub) { try { AUTH.usersUnsub(); } catch {} AUTH.usersUnsub = null; } AUTH.users = {};
+  $('#layer').innerHTML = '';
 }
+function logout(msg){ AUTH.flash = msg || ''; stopApp(); FB.auth.signOut(); }
 
 /* KULLANICILAR (admin) */
 function rKullanici(){
@@ -1495,58 +1709,45 @@ function rKullanici(){
     f._init = true;
     $('#u-gen').addEventListener('click', () => { $('#u-pw').value = genPw(); });
     $('#u-pw').value = genPw();
-    f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#u-msg');
+    f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#u-msg'), btn = f.querySelector('button[type=submit]');
       const ad = $('#u-ad').value.trim(), email = $('#u-mail').value.trim().toLowerCase(), rol = $('#u-rol').value, pw = $('#u-pw').value.trim();
-      if (!ad || !/^\S+@\S+\.\S+$/.test(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
-      if (AUTH.hesaplar[ekey(email)]) return m.textContent = 'Bu e-posta ile bir kullanıcı zaten var.';
+      if (!ad || !okMail(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
+      if (Object.values(AUTH.users).some(h => h.email === email)) return m.textContent = 'Bu e-posta ile bir kullanıcı zaten var.';
       if (!pwRule(pw)) { $('#u-pw').value = genPw(); return m.textContent = 'Yeni geçici şifre üretildi, tekrar deneyin.'; }
-      m.textContent = 'Kaydediliyor…';
-      try { const { salt, hash, it } = await makeHash(pw);
-        await S.db.doc('hesaplar/' + ekey(email)).set({ email, ad, rol, aktif:true, geciciSalt:salt, geciciHash:hash, geciciIt:it, geciciSon:new Date(Date.now() + 72*3600e3).toISOString(), uids:[], sifirlaSurumu:0, olusturan:AUTH.me.email, olusturma:new Date().toISOString() });
-        f.reset(); $('#u-pw').value = genPw(); m.textContent = ''; showCred(ad, email, pw, 'eklendi');
-      } catch (err) { m.textContent = adminErr(err); }
+      busy(btn, m, 'Kullanıcı oluşturuluyor…');
+      try {
+        const uid = await FB.auth.adminCreate(email, pw);
+        await S.db.doc('kullanicilar/' + uid).set({ email, ad, rol, aktif:true, geciciSifre:true, olusturan:AUTH.me.email, olusturma:new Date().toISOString() });
+        f.reset(); $('#u-pw').value = genPw(); idle(btn, m); showCred(ad, email, pw, 'eklendi');
+      } catch (err) { idle(btn, m, err.code === 'auth/email-already-in-use' ? 'Bu e-posta Firebase\'de zaten kayıtlı (daha önce silinmiş bir kullanıcı olabilir). Firebase konsolu → Authentication → Users bölümünden bu e-postayı silip tekrar deneyin.' : adminErr(err)); }
     });
   }
-  // onay bekleyen cihaz bağlantıları
-  const pend = AUTH.bagList.filter(b => { const uid = b.uid; const hh = AUTH.hesaplar[ekey(b.email)]; return b.talep && hh && !(hh.uids || []).includes(uid) && !(hh.reddedilen || []).includes(uid); });
-  const pn = $('#u-pending');
-  pn.hidden = !pend.length;
-  pn.innerHTML = pend.length ? `<header><h3>Onay bekleyen girişler</h3><span class="muted" style="font-size:.8rem">Claude hesap adını kontrol edip onaylayın</span></header><div class="tablewrap"><table><thead><tr><th>Uygulama hesabı</th><th>Claude hesabı</th><th>Talep</th><th></th></tr></thead><tbody>${pend.map(b => { const uid = b.uid; return `<tr><td>${esc(AUTH.hesaplar[ekey(b.email)].ad)} <span class="muted mono" style="font-size:.8rem">${esc(b.email)}</span></td><td data-uname="${esc(uid)}">${esc(AUTH.names[uid] || '…')}</td><td class="mono" style="font-size:.85rem">${b.zaman ? esc(fmtTs(b.zaman)) : '—'}</td><td style="white-space:nowrap"><button class="btn sm primary" data-uok="${esc(uid)}" data-umail="${esc(b.email)}">Onayla</button> <button class="btn sm danger" data-uno="${esc(uid)}" data-umail="${esc(b.email)}">Reddet</button></td></tr>`; }).join('')}</tbody></table></div>` : '';
-  const need = [...new Set(pend.map(b => b.uid))].filter(uid => !AUTH.names[uid]);
-  if (need.length && S.user?.profiles) S.user.profiles(need).then(ps => { need.forEach(uid => { AUTH.names[uid] = ps?.[uid]?.name || 'Adı görünmüyor'; }); render(); }).catch(() => {});
-  const list = Object.values(AUTH.hesaplar).sort((a,b) => (a.ad||'').localeCompare(b.ad||'', 'tr'));
-  const last = email => AUTH.bagList.filter(b => b.email === email && b.sonGiris).map(b => b.sonGiris).sort().pop();
+  const list = Object.values(AUTH.users).sort((a,b) => (a.ad||'').localeCompare(b.ad||'', 'tr'));
   $('#u-count').textContent = `${list.length} kullanıcı · ${list.filter(h => h.rol === 'admin').length} admin`;
-  $('#u-table').innerHTML = `<thead><tr><th>Ad soyad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Son giriş</th><th></th></tr></thead><tbody>` + list.map(h => { const [dt, dk] = durumOf(h); const self = h.email === AUTH.me.email; const lg = last(h.email);
+  $('#u-table').innerHTML = `<thead><tr><th>Ad soyad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Son giriş</th><th></th></tr></thead><tbody>` + list.map(h => { const [dt, dk] = durumOf(h); const self = h.uid === AUTH.me.uid; const k = esc(h.uid);
     return `<tr><td>${esc(h.ad)}${self ? ' <span class="muted">(siz)</span>' : ''}</td><td class="mono" style="font-size:.85rem">${esc(h.email)}</td>
-      <td>${self ? (h.rol === 'admin' ? 'Admin' : 'Kullanıcı') : `<select class="btn sm" data-urol="${h.key}" aria-label="Rol"><option value="kullanici"${h.rol==='kullanici'?' selected':''}>Kullanıcı</option><option value="admin"${h.rol==='admin'?' selected':''}>Admin</option></select>`}</td>
-      <td><span class="pill ${dk}">${dt}</span></td><td class="mono" style="font-size:.85rem">${lg ? esc(fmtTs(lg)) : '—'}</td>
-      <td style="white-space:nowrap">${self ? '' : `<button class="btn sm" data-ureset="${esc(h.key)}">Şifre sıfırla</button> <button class="btn sm" data-uakt="${h.key}">${h.aktif ? 'Pasifleştir' : 'Aktifleştir'}</button> <button class="btn sm danger" data-udel="${h.key}">Sil</button>`}</td></tr>`; }).join('') + '</tbody>';
+      <td>${self ? (h.rol === 'admin' ? 'Admin' : 'Kullanıcı') : `<select class="btn sm" data-urol="${k}" aria-label="Rol"><option value="kullanici"${h.rol==='kullanici'?' selected':''}>Kullanıcı</option><option value="admin"${h.rol==='admin'?' selected':''}>Admin</option></select>`}</td>
+      <td><span class="pill ${dk}">${dt}</span></td><td class="mono" style="font-size:.85rem">${h.sonGiris ? esc(fmtTs(h.sonGiris)) : '—'}</td>
+      <td style="white-space:nowrap">${self ? '' : `<button class="btn sm" data-ureset="${k}">Şifre yenileme e-postası</button> <button class="btn sm" data-uakt="${k}">${h.aktif ? 'Pasifleştir' : 'Aktifleştir'}</button> <button class="btn sm danger" data-udel="${k}">Sil</button>`}</td></tr>`; }).join('') + '</tbody>';
 }
-function adminErr(err){ return (err?.code === 'not_granted' || err?.code === 'invalid_argument') ? 'Kaydedilemedi: kullanıcı yönetimi için bu sayfada Claude düzenleme (Editor) yetkiniz olmalı.' : 'Kaydedilemedi: ' + (err?.message || err?.code || 'hata'); }
+function adminErr(err){ return 'Kaydedilemedi: ' + (err?.message || 'hata'); }
 function showCred(ad, email, pw, what){
-  $('#u-cred').innerHTML = `<div class="banner"><b>${esc(ad)} ${what}.</b> Bu bilgileri kullanıcıya iletin; geçici şifre bir daha gösterilmez.<div class="cred mono" id="u-cred-t">E-posta: ${esc(email)}\nGeçici şifre: ${esc(pw)}</div><button class="btn sm" id="u-cred-cp">Kopyala</button> <button class="btn sm" id="u-cred-x">Kapat</button></div>`;
-  $('#u-cred-cp').onclick = e => copyText(`E-posta: ${email}\nGeçici şifre: ${pw}`, e.target); $('#u-cred-x').onclick = () => $('#u-cred').innerHTML = '';
+  $('#u-cred').innerHTML = `<div class="banner"><b>${esc(ad)} ${what}.</b> Aşağıdaki bilgileri kullanıcıya iletin; geçici şifre bir daha gösterilmez. Kullanıcının e-postasına ayrıca bir doğrulama bağlantısı gönderildi; ilk girişte bu bağlantıya tıklaması gerekir.<div class="cred mono" id="u-cred-t">Adres: ${esc(location.origin + location.pathname)}\nE-posta: ${esc(email)}\nGeçici şifre: ${esc(pw)}</div><button class="btn sm" id="u-cred-cp">Kopyala</button> <button class="btn sm" id="u-cred-x">Kapat</button></div>`;
+  $('#u-cred-cp').onclick = e => copyText(`Adres: ${location.origin + location.pathname}\nE-posta: ${email}\nGeçici şifre: ${pw}`, e.target); $('#u-cred-x').onclick = () => $('#u-cred').innerHTML = '';
 }
-document.addEventListener('click', async e => { const ok = e.target.closest('[data-uok]'), no = e.target.closest('[data-uno]'); if ((!ok && !no) || !S.isAdmin) return;
-  const el = ok || no, uid = el.dataset.uok || el.dataset.uno; const h = AUTH.hesaplar[ekey(el.dataset.umail)]; if (!h || !uid) return;
-  try {
-    if (ok) { await S.db.doc('hesaplar/' + h.key).update({ uids:[...new Set([...(h.uids || []), uid])], geciciSalt:null, geciciHash:null, geciciIt:null, geciciSon:null }); toast('Giriş onaylandı'); }
-    else { await S.db.doc('hesaplar/' + h.key).update({ reddedilen:[...new Set([...(h.reddedilen || []), uid])] }); toast('Talep reddedildi'); }
-  } catch (err) { toast(adminErr(err)); } });
-const admins = () => Object.values(AUTH.hesaplar).filter(h => h.rol === 'admin' && h.aktif);
-document.addEventListener('change', async e => { const s = e.target.closest('[data-urol]'); if (!s) return; const h = AUTH.hesaplar[s.dataset.urol];
+const admins = () => Object.values(AUTH.users).filter(h => h.rol === 'admin' && h.aktif);
+document.addEventListener('change', async e => { const s = e.target.closest('[data-urol]'); if (!s || !S.isAdmin) return; const h = AUTH.users[s.dataset.urol]; if (!h) return;
   if (h.rol === 'admin' && s.value !== 'admin' && admins().length <= 1) { s.value = 'admin'; return toast('En az bir admin kalmalı'); }
-  try { await S.db.doc('hesaplar/' + h.key).update({ rol:s.value }); toast('Rol güncellendi'); } catch (err) { s.value = h.rol; toast(adminErr(err)); } });
+  try { await S.db.doc('kullanicilar/' + h.uid).update({ rol:s.value === 'admin' ? 'admin' : 'kullanici' }); toast('Rol güncellendi'); } catch (err) { s.value = h.rol; toast(adminErr(err)); } });
 document.addEventListener('click', async e => {
   const r = e.target.closest('[data-ureset]'), a = e.target.closest('[data-uakt]'), d = e.target.closest('[data-udel]');
   const b = r || a || d; if (!b || !S.isAdmin) return;
-  const h = AUTH.hesaplar[(r && r.dataset.ureset) || (a && a.dataset.uakt) || (d && d.dataset.udel)]; if (!h) return;
+  const h = AUTH.users[(r && r.dataset.ureset) || (a && a.dataset.uakt) || (d && d.dataset.udel)]; if (!h) return;
   if ((d || r) && !b.dataset.sure) { b.dataset.sure = 1; const o = b.textContent; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = o; }, 3500); return; }
   try {
-    if (r) { const pw = genPw(); const { salt, hash, it } = await makeHash(pw); await S.db.doc('hesaplar/' + h.key).update({ geciciSalt:salt, geciciHash:hash, geciciIt:it, geciciSon:new Date(Date.now() + 72*3600e3).toISOString(), uids:[], sifirlaSurumu:(h.sifirlaSurumu||0) + 1, sifirlamaTarihi:new Date().toISOString() }); showCred(h.ad, h.email, pw, 'için şifre sıfırlandı'); }
-    if (a) { if (h.aktif && h.rol === 'admin' && admins().length <= 1) return toast('En az bir aktif admin kalmalı'); await S.db.doc('hesaplar/' + h.key).update({ aktif:!h.aktif }); toast(h.aktif ? 'Kullanıcı pasifleştirildi' : 'Kullanıcı aktifleştirildi'); }
-    if (d) { if (h.rol === 'admin' && admins().length <= 1) return toast('Son admin silinemez'); await S.db.doc('hesaplar/' + h.key).delete(); toast('Kullanıcı silindi'); }
+    if (r) { await FB.auth.resetMail(h.email); toast(`${h.email} adresine şifre yenileme bağlantısı gönderildi`); }
+    if (a) { if (h.aktif && h.rol === 'admin' && admins().length <= 1) return toast('En az bir aktif admin kalmalı'); await S.db.doc('kullanicilar/' + h.uid).update({ aktif:!h.aktif }); toast(h.aktif ? 'Kullanıcı pasifleştirildi; artık hiçbir kayda erişemez' : 'Kullanıcı aktifleştirildi'); }
+    if (d) { if (h.rol === 'admin' && admins().length <= 1) return toast('Son admin silinemez'); await S.db.doc('kullanicilar/' + h.uid).delete(); toast('Kullanıcı silindi. Aynı e-postayı yeniden eklemek için Firebase konsolundan da silin.'); }
   } catch (err) { toast(adminErr(err)); }
 });
 
@@ -1556,46 +1757,35 @@ function rHesap(){
   $('#h-info').innerHTML = `<div><span class="muted">Ad soyad</span><b>${esc(AUTH.me.ad || '')}</b></div><div><span class="muted">E-posta</span><b class="mono">${esc(AUTH.me.email)}</b></div><div><span class="muted">Rol</span><b>${S.isAdmin ? 'Admin' : 'Kullanıcı'}</b></div>`;
   const f = $('#f-pw');
   if (f._init) return; f._init = true;
-  f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#h-msg'), k = AUTH.kimlikler[AUTH.me.email], g = s => $(s).value;
-    if (!await checkHash(g('#h-old'), k?.salt, k?.hash, k?.it)) return m.textContent = 'Mevcut şifre hatalı.';
+  f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#h-msg'), g = s => $(s).value, btn = f.querySelector('button[type=submit]');
     if (!pwRule(g('#h-new'))) return m.textContent = PW_HINT; if (g('#h-new') !== g('#h-new2')) return m.textContent = 'Yeni şifreler aynı değil.';
-    if (!await checkTotp(k.totp, g('#h-code'), k.kayma || 0)) return m.textContent = 'Authenticator kodu hatalı.';
-    m.textContent = 'Kaydediliyor…';
-    try { const { salt, hash, it } = await makeHash(g('#h-new')); await kimlikRef(AUTH.me.email).update({ salt, hash, it, guncelleme:new Date().toISOString() }); AUTH.kimlikler[AUTH.me.email] = { ...k, salt, hash, it }; f.reset(); m.textContent = ''; toast('Şifreniz değiştirildi'); }
-    catch (err) { m.textContent = 'Kaydedilemedi: ' + (err?.code || 'hata'); }
+    busy(btn, m);
+    try { await FB.auth.reauth(g('#h-old'), g('#h-code')); await FB.auth.setPassword(g('#h-new')); f.reset(); idle(btn, m); toast('Şifreniz değiştirildi'); }
+    catch (err) { idle(btn, m, err.message); }
   });
-  $('#f-totp').addEventListener('submit', async e => { e.preventDefault(); const m = $('#t-msg'), k = AUTH.kimlikler[AUTH.me.email];
-    if (!await checkHash($('#t-pw').value, k?.salt, k?.hash, k?.it)) return m.textContent = 'Şifre hatalı.';
-    if (!await checkTotp(k.totp, $('#t-code').value, k.kayma || 0)) return m.textContent = 'Mevcut authenticator kodu hatalı.';
-    $('#f-totp').reset(); m.textContent = ''; showAuth('totp', { mode:'renew', email:AUTH.me.email });
+  $('#f-totp').addEventListener('submit', async e => { e.preventDefault(); const m = $('#t-msg'), btn = $('#f-totp button[type=submit]');
+    busy(btn, m);
+    try { await FB.auth.reauth($('#t-pw').value, $('#t-code').value); await FB.auth.totpRemove(); $('#f-totp').reset(); idle(btn, m);
+      AUTH.flash = 'Eski authenticator kaldırıldı. Şifrenizle giriş yapın; ardından yeni authenticator tanımlama ekranı açılacak.'; stopApp(); await FB.auth.signOut(); }
+    catch (err) { idle(btn, m, err.message); }
   });
 }
 
 /* ---------- açılış ---------- */
-async function boot(){
+let booted = false;
+function boot(){
+  if (booted) return; booted = true;
   const saved = ls.get('isg.tab'); S.tab = TABS.some(t => t[0] === saved) ? saved : 'aktivite';
-  showAuth('loading');
-  if (!window.claude?.use) { showAuth('offline'); return; }
-  const [db, user, assets, downloads] = await Promise.all(['db','user','assets','downloads'].map(n => window.claude.use(n).catch(() => null)));
-  Object.assign(S, { db, user, assets, downloads });
-  if (user) { try { S.meId = await user.id(); S.isOwner = await user.isOwner(); const c = await user.can('data.write'); S.canWrite = c !== false; } catch {} }
-  if (!db || !S.meId) { showAuth('nodb'); return; }
-  if (!window.crypto?.subtle) { showAuth('nocrypto'); return; }
-  try {
-    const snap = await db.collection('data/users/' + S.meId).get();
-    for (const d of snap.docs) { const v = d.data(); if (!v?.email) continue;
-      if (d.id === 'kimlik') { if (!AUTH.kimlikler[v.email]) { AUTH.kimlikler[v.email] = v; kimlikRef(v.email).set(v).catch(() => {}); } }
-      else if (d.id.startsWith('kimlik_')) AUTH.kimlikler[v.email] = v; }
-  } catch {}
-  let first = true;
-  db.collection('hesaplar').onSnapshot(snap => { AUTH.hesaplar = Object.fromEntries(snap.docs.map(d => [d.id, { key:d.id, ...d.data() }])); if (first) { first = false; decideAuth(); } else { onHesapChange(); if (S.tab === 'kullanici') render(); } }, () => showAuth('nodb'));
-  db.collection('baglar').onSnapshot(snap => { const str = v => typeof v === 'string' ? v : ''; AUTH.bagRaw = {}; AUTH.bagList = [];
-    snap.docs.forEach(d => { const v = d.data() || {}; const map = (v.hesaplar && typeof v.hesaplar === 'object' && !Array.isArray(v.hesaplar)) ? v.hesaplar : {}; AUTH.bagRaw[d.id] = map;
-      const accs = Object.values(map).filter(a => a && typeof a === 'object'); if (!accs.length && typeof v.email === 'string') accs.push(v);
-      accs.forEach(a => AUTH.bagList.push({ uid:d.id, email:str(a.email).toLowerCase(), talep:a.talep === true, sonGiris:str(a.sonGiris), zaman:str(a.zaman) })); });
-    if (AUTH.me && S.tab === 'kullanici') render(); });
-  if (!S.canWrite) banner('Bu sayfayı görüntüleme yetkiniz var; kayıt girmek için sayfa sahibinden düzenleme yetkisi isteyin.');
+  if (!window.crypto?.getRandomValues) return showAuth('nocrypto');
+  if (!window.FB) return showAuth('nolib');
+  if (!FB.configured) return showAuth('noconfig');
+  S.db = FB.db;
+  FB.auth.onChange(() => route());
+  window.addEventListener('hashchange', () => { if (!FB.auth.current() && location.hash === '#kurulum') showAuth('kurulum'); });
 }
-boot();
+showAuth('loading');
+if (window.FB) boot(); else { window.addEventListener('fb-ready', boot); setTimeout(() => { if (!booted) boot(); }, 20000); }
 })();
 </script>
+</body>
+</html>
