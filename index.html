@@ -382,7 +382,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
   <section class="view" id="v-dof" hidden>
     <div class="bar">
       <h2 class="grow">DÖF / uygunsuzluk takibi</h2>
-      <button class="btn primary" id="dof-new">+ Yeni DÖF</button>
+      <button class="btn primary" id="dof-new">+ Yeni DÖF</button><button class="btn" data-toplu="dof">Excel ile toplu giriş</button>
     </div>
     <div class="bar">
       <select id="dof-durum" class="btn sm" aria-label="Durum"><option value="acik">Açık olanlar</option><option value="">Tüm durumlar</option><option>Tamamlandı</option><option>İptal</option></select>
@@ -395,7 +395,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
 
   <!-- KAZA -->
   <section class="view" id="v-kaza" hidden>
-    <div class="bar"><h2 class="grow">Kaza Rapor</h2><button class="btn primary" id="kaza-new" data-tip="Kaza">+ Kaza bildir</button><button class="btn" id="rk-new" data-tip="Ramak Kala">+ Ramak kala bildir</button></div>
+    <div class="bar"><h2 class="grow">Kaza Rapor</h2><button class="btn primary" id="kaza-new" data-tip="Kaza">+ Kaza bildir</button><button class="btn" id="rk-new" data-tip="Ramak Kala">+ Ramak kala bildir</button><button class="btn" data-toplu="kaza">Excel ile toplu giriş</button></div>
     <div class="kpis" id="kaza-kpis"></div>
     <div class="bar"><div class="seg" role="tablist" aria-label="Olay tipi"><button type="button" data-kfilt="">Tümü</button><button type="button" data-kfilt="Kaza">Kaza</button><button type="button" data-kfilt="Ramak Kala">Ramak kala</button></div></div>
     <div class="tablewrap lim"><table id="kaza-table"></table></div>
@@ -403,7 +403,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
 
   <!-- CEZA & ÖDÜL -->
   <section class="view" id="v-ceza" hidden>
-    <div class="bar"><h2 class="grow">Ceza</h2><button class="btn primary" data-czyeni="Ceza">+ Ceza</button></div>
+    <div class="bar"><h2 class="grow">Ceza</h2><button class="btn primary" data-czyeni="Ceza">+ Ceza</button><button class="btn" data-toplu="ceza">Excel ile toplu giriş</button></div>
     <div class="kpis" id="cz-kpis"></div>
     <div class="tablewrap lim"><table id="cz-table"></table></div>
   </section>
@@ -1014,6 +1014,184 @@ function openKaza(id, tip){
     } catch (err) { msg.textContent = err.message || ('Kaydedilemedi: ' + (err.code||'')); btn.disabled = false; }
   });
 }
+
+/* ---------- Excel ile toplu giriş (Kaza / ramak kala, DÖF, Ceza) ----------
+   Her tür için şablon indirilir, doldurulur, yüklenir; satırlar doğrulanır, hatalı satırlar atlanır.
+   Aynı dosya tekrar yüklenirse aynı satırlar ikinci kez eklenmez. */
+const TP_LIST = (vals, strict) => ({ t:'liste', vals, strict });
+const TOPLU = {
+  kaza: {
+    ad:'Kaza / ramak kala', col:'kazalar', on:'k-x', sayfa:'KAZA',
+    cols: () => [
+      ['Olay tipi', 'olayTipi', TP_LIST(['Kaza','Ramak Kala'], true), 1],
+      ['Tarih', 'tarih', { t:'tarih' }, 1],
+      ['Saat aralığı', 'saat', TP_LIST(KZ.saat, true)],
+      ['Bölge', 'bolge', TP_LIST(KZ.bolge)],
+      ['Lokasyon', 'lokasyon', { t:'lok' }],
+      ['Proje', 'proje', { t:'metin' }],
+      ['Kaza sınıfı', 'sinif', TP_LIST(KZ.sinif, true)],
+      ['Kaza / olay türü', 'tur', TP_LIST(KZ.tur), 1],
+      ['Sonuç', 'sonuc', TP_LIST(KZ.sonuc, true)],
+      ['Yaralanan uzuv', 'uzuv', TP_LIST(KZ.uzuv, true)],
+      ['Yaralanma türü', 'yaralanmaTuru', { t:'metin' }],
+      ['Kayıp gün', 'kayipGun', { t:'sayi' }],
+      ['Sorumlu süpervizör', 'supervizor', { t:'buyuk' }],
+      ['İşveren', 'isveren', { t:'buyuk' }],
+      ['Alt yüklenici', 'altYuklenici', TP_LIST(S.cfg.altyukleniciler)],
+      ['Olay açıklaması', 'aciklama', { t:'metin' }, 1],
+      ['Kök neden', 'kokNeden', { t:'metin' }],
+      ['Aksiyon durumu', 'aksiyonDurumu', TP_LIST(['DEVAM EDİYOR','TAMAMLANDI'], true)]
+    ],
+    fix(r){ if (r.olayTipi === 'Kaza') { r.sinif = r.sinif || 'Minör'; r.sonuc = r.sonuc || 'Hafif Yaralanma'; r.uzuv = r.uzuv || 'N/A'; r.kayipGun = r.kayipGun || 0; } else Object.assign(r, { sinif:'', sonuc:'NA', uzuv:'N/A', yaralanmaTuru:'', kayipGun:0 });
+      r.aksiyonDurumu = r.aksiyonDurumu || 'DEVAM EDİYOR'; r.proje = r.proje || 'MTX'; },
+    key: r => [r.olayTipi, r.tarih, r.saat, r.lokasyon, r.tur, r.aciklama.slice(0, 120)].join('|'),
+    mevcut: () => S.kazalar.map(x => x.id)
+  },
+  dof: {
+    ad:'DÖF', col:'dof', on:'d-x', sayfa:'DOF',
+    cols: () => [
+      ['Tarih', 'tarih', { t:'tarih' }, 1],
+      ['Bildiren', 'bildiren', { t:'kisi' }],
+      ['Form no', 'formNo', { t:'metin' }],
+      ['Lokasyon', 'lokasyon', { t:'lok' }, 1],
+      ['İletilen firma / departman', 'firma', TP_LIST(S.cfg.firmalar)],
+      ['Alt yüklenici', 'altYuklenici', TP_LIST(S.cfg.altyukleniciler)],
+      ['Bildirim türü', 'bildirimTuru', TP_LIST(['Güvensiz Durum/Davranış','Güvenli Durum/Davranış'], true)],
+      ['Uygunsuzluk türü', 'uygunsuzlukTuru', TP_LIST(UYG)],
+      ['Gözlem', 'gozlem', { t:'metin' }, 1],
+      ['Olasılık (1-5)', 'olasilik', { t:'puan' }],
+      ['Şiddet (1-5)', 'siddet', { t:'puan' }],
+      ['Aksiyon', 'aksiyon', { t:'metin' }],
+      ['Aksiyon sorumlusu', 'sorumlu', { t:'metin' }],
+      ['Hedef tarih', 'hedefTarih', { t:'tarih' }],
+      ['Durum', 'durum', TP_LIST(['Devam Ediyor','Tamamlandı','İptal'], true)],
+      ['Gerçekleşen tarih', 'kapanisTarih', { t:'tarih' }],
+      ['Açıklama', 'aciklama', { t:'metin' }]
+    ],
+    fix(r, ctx){ r.bildirimTuru = r.bildirimTuru || 'Güvensiz Durum/Davranış'; r.durum = r.durum || 'Devam Ediyor';
+      if (r.durum === 'Tamamlandı' && !r.kapanisTarih) r.kapanisTarih = r.tarih;
+      if (!r.formNo) { const ini = (r.bildiren || 'XX').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toLocaleUpperCase('tr-TR') || 'XX'; const y = +r.tarih.slice(0, 4);
+        if (!ctx.no[ini + y]) { const seqs = S.dofs.filter(d => d.yil === y && (d.formNo || '').startsWith(ini + '_')).map(d => parseInt(d.formNo.split('_')[1], 10)).filter(n => !isNaN(n)); ctx.no[ini + y] = seqs.length ? Math.max(...seqs) : 0; }
+        r.formNo = `${ini}_${pad(++ctx.no[ini + y])}`; } },
+    key: r => [r.tarih, r.lokasyon, r.gozlem.slice(0, 160)].join('|'),
+    mevcut: () => S.dofs.map(x => x.id)
+  },
+  ceza: {
+    ad:'Ceza', col:'cezalar', on:'c-x', sayfa:'CEZA',
+    cols: () => [
+      ['Tarih', 'tarih', { t:'tarih' }, 1],
+      ['Lokasyon', 'lokasyon', { t:'lok' }],
+      ['Proje', 'proje', { t:'metin' }],
+      ['Ceza tutarı (TL)', 'tutar', { t:'para' }, 1],
+      ['Cezayı kesen', 'cezayiKesen', TP_LIST(['Vodafone','Mikrolink','Diğer'], true)],
+      ['Ceza kesilen firma', 'cezaKesilen', TP_LIST(uniq(['Mikrolink', ...S.cfg.altyukleniciler]))],
+      ['Yansıtılan firma', 'yansitma', TP_LIST(uniq([...S.cfg.altyukleniciler, ...S.cfg.firmalar.filter(x => x !== 'Vodafone')]))],
+      ['Yansıtılan tutar (TL)', 'yansitmaTutar', { t:'para' }],
+      ['Ceza maddesi', 'madde', { t:'metin' }],
+      ['Açıklama', 'aciklama', { t:'metin' }],
+      ['Belge notu', 'belgeNot', { t:'metin' }]
+    ],
+    fix(r){ r.tip = 'Ceza'; r.proje = r.proje || 'MTX'; r.cezayiKesen = r.cezayiKesen || 'Vodafone'; r.cezaKesilen = r.cezaKesilen || 'Mikrolink'; r.belge = [];
+      if (!r.yansitma) r.yansitmaTutar = null; else if (r.yansitmaTutar == null) r.yansitmaTutar = r.tutar;
+      r.ay = +r.tarih.slice(5, 7); r.altYuklenici = r.yansitma && S.cfg.altyukleniciler.includes(r.yansitma) ? r.yansitma : (S.cfg.altyukleniciler.includes(r.cezaKesilen) ? r.cezaKesilen : '');
+      if (!(r.tutar > 0)) return 'Ceza tutarı 0\'dan büyük olmalı';
+      if (r.yansitmaTutar != null && r.yansitmaTutar > r.tutar) return 'Yansıtılan tutar ceza tutarından büyük olamaz'; },
+    key: r => [r.tarih, r.lokasyon, r.tutar, r.madde, r.cezaKesilen, r.aciklama.slice(0, 80)].join('|'),
+    mevcut: () => (S._czRaw || []).map(x => x.id)
+  }
+};
+const hdrKey = v => tru(String(v ?? '').replace(/\*/g, '')).replace(/[^A-ZÇĞİÖŞÜ0-9]/g, '');
+function tpDate(v){
+  if (v instanceof Date && !isNaN(v)) return ymd(v);
+  if (typeof v === 'number' && window.XLSX) { const p = XLSX.SSF.parse_date_code(v); return p ? `${p.y}-${pad(p.m)}-${pad(p.d)}` : ''; }
+  const s = String(v ?? '').trim(); let m;
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  if ((m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/))) return `${m[3]}-${pad(+m[2])}-${pad(+m[1])}`;
+  return '';
+}
+function tpCell(spec, v){
+  const s = String(v ?? '').trim(); if (!s && (spec.t === 'para' || spec.t === 'puan')) return [null]; if (!s && spec.t !== 'sayi') return [''];
+  switch (spec.t) {
+    case 'tarih': { const d = tpDate(v); return d && parseD(d) ? [d] : ['', 'tarih anlaşılamadı (gg.aa.yyyy yazın)']; }
+    case 'lok': return [normLok(s)];
+    case 'kisi': return [s];
+    case 'buyuk': return [tru(s)];
+    case 'sayi': { if (!s) return [0]; const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) && n >= 0 ? [Math.round(n)] : [0, 'sayı olmalı']; }
+    case 'para': { const n = typeof v === 'number' ? v : Number(s.replace(/[₺\s]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? [Math.round(n * 100) / 100] : [null, 'tutar sayı olmalı']; }
+    case 'puan': { const n = Number(s); return Number.isInteger(n) && n >= 1 && n <= 5 ? [n] : [null, '1-5 arası olmalı']; }
+    case 'liste': { const hit = spec.vals.find(x => tru(x) === tru(s)); if (hit) return [hit]; return spec.strict ? ['', `"${s}" geçerli değil (seçenekler: ${spec.vals.join(', ')})`] : [s]; }
+    default: return [s.slice(0, 4000)];
+  }
+}
+function tpParse(tur, rows){
+  const T = TOPLU[tur], cols = T.cols(); if (!rows.length) throw new Error('Dosyada satır yok.');
+  let hi = rows.findIndex(r => (r || []).some(c => cols.some(([h]) => hdrKey(c) === hdrKey(h)))); if (hi < 0) throw new Error('Başlık satırı bulunamadı. Lütfen indirdiğiniz şablonu kullanın.');
+  const head = rows[hi].map(hdrKey), idx = cols.map(([h]) => head.indexOf(hdrKey(h)));
+  const eksik = cols.filter(([, , , req], i) => req && idx[i] < 0).map(([h]) => h); if (eksik.length) throw new Error('Şablonda zorunlu sütun eksik: ' + eksik.join(', '));
+  const ctx = { no:{} }, out = [], seen = {}, var_ = new Set(T.mevcut());
+  rows.slice(hi + 1).forEach((row, i) => {
+    if (!(row || []).some(c => String(c ?? '').trim())) return;
+    const r = {}, errs = [];
+    cols.forEach(([h, k, spec, req], j) => { const [val, e] = tpCell(spec, idx[j] >= 0 ? row[idx[j]] : ''); r[k] = val; if (e) errs.push(`${h}: ${e}`); else if (req && (val === '' || val == null)) errs.push(`${h} boş`); });
+    if (tur === 'dof') { const b = rapBul(r.bildiren); r.bildiren = b || nameCase(AUTH.me?.ad); }
+    if (!errs.length) { const e = T.fix(r, ctx); if (e) errs.push(e); }
+    const line = hi + i + 2;
+    if (errs.length) return out.push({ line, err:errs.join(' · ') });
+    const canon = T.key(r); const n = seen[canon] || 0; seen[canon] = n + 1;
+    const id = T.on + fnv(canon) + (n ? '-' + n : '');
+    out.push({ line, id, rec:{ ...r, yil:+r.tarih.slice(0, 4), hafta:isoWeek(parseD(r.tarih)).w }, var:var_.has(id) });
+  });
+  return out;
+}
+function tpTemplate(tur){
+  const T = TOPLU[tur], cols = T.cols();
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([cols.map(([h, , , req]) => h + (req ? ' *' : ''))]); ws['!cols'] = cols.map(([h, , spec]) => ({ wch: spec.t === 'metin' ? 40 : Math.max(14, h.length + 4) })); XLSX.utils.book_append_sheet(wb, ws, T.sayfa);
+  const lists = cols.filter(([, , s]) => s.t === 'liste' || s.t === 'lok' || s.t === 'kisi' || s.t === 'puan');
+  const colsL = lists.map(([h, , s]) => [h, ...(s.t === 'lok' ? S.cfg.lokasyonlar : s.t === 'kisi' ? RAP : s.t === 'puan' ? ['1','2','3','4','5'] : s.vals)]);
+  const maxL = Math.max(0, ...colsL.map(c => c.length)); const aoa = []; for (let i = 0; i < maxL; i++) aoa.push(colsL.map(c => c[i] ?? ''));
+  const wl = XLSX.utils.aoa_to_sheet(aoa); wl['!cols'] = colsL.map(() => ({ wch:28 })); XLSX.utils.book_append_sheet(wb, wl, 'SEÇENEKLER');
+  const info = [['SiteEye · ' + T.ad + ' toplu giriş şablonu'], [], ['• Her satır bir kayıttır. * işaretli sütunlar zorunludur.'], ['• Tarihleri gg.aa.yyyy biçiminde yazın (ör. 23.09.2026) veya Excel tarih hücresi kullanın.'], ['• Liste sütunlarında SEÇENEKLER sayfasındaki değerlerden birini yazın (büyük/küçük harf fark etmez).'],
+    ...(tur === 'kaza' ? [['• Olay tipi "Ramak Kala" ise sınıf, sonuç, uzuv ve kayıp gün dikkate alınmaz.']] : []),
+    ...(tur === 'dof' ? [['• Bildiren kullanıcılardan biri olmalı; boş veya farklıysa yükleyen kişinin adı yazılır. Form no boşsa otomatik verilir.']] : []),
+    ...(tur === 'ceza' ? [['• Yansıtılan firma doluysa ve yansıtılan tutar boşsa tutarın tamamı yansıtılmış sayılır.']] : []),
+    ['• Fotoğraf ve belgeler toplu girişte eklenmez; gerekirse kayıt açılıp sonradan eklenir.'], ['• Aynı dosyayı tekrar yüklemek aynı satırları ikinci kez eklemez.']];
+  const wi = XLSX.utils.aoa_to_sheet(info); wi['!cols'] = [{ wch:110 }]; XLSX.utils.book_append_sheet(wb, wi, 'AÇIKLAMA');
+  return new Uint8Array(XLSX.write(wb, { bookType:'xlsx', type:'array' }));
+}
+function openToplu(tur){
+  const T = TOPLU[tur];
+  const o = sheet(`<header><h2>${esc(T.ad)} · Excel ile toplu giriş</h2><button class="btn sm" data-close>Kapat</button></header>
+    <ol class="steps"><li>Şablonu indirin ve her satıra bir kayıt girin.</li><li>Doldurduğunuz dosyayı seçin; satırlar kontrol edilir.</li><li>Önizlemeyi kontrol edip <b>Kaydet</b>'e basın. Hatalı satırlar atlanır.</li></ol>
+    <div class="bar" style="margin:10px 0"><button class="btn" type="button" id="tp-sablon">Şablonu indir</button><input type="file" id="tp-file" accept=".xlsx,.xlsm,.xls"><button class="btn primary" type="button" id="tp-go" disabled>Kaydet</button></div>
+    <p class="muted" id="tp-msg" style="font-size:.9rem"></p><div class="progress" id="tp-prog" hidden><div></div></div><div id="tp-prev"></div>`);
+  const q = x => o.querySelector(x); let R = [];
+  q('#tp-sablon').addEventListener('click', async () => { if (!window.XLSX) return toast('Excel kütüphanesi yüklenemedi'); await saveFile(`SiteEye_${T.sayfa}_toplu_giris_sablonu.xlsx`, tpTemplate(tur)); });
+  q('#tp-file').addEventListener('change', async e => { const file = e.target.files[0], m = q('#tp-msg'); R = []; q('#tp-go').disabled = true; q('#tp-prev').innerHTML = ''; if (!file) return;
+    if (!window.XLSX) return m.textContent = 'Excel kütüphanesi yüklenemedi.';
+    try {
+      if (file.size > 15 * 1048576) throw new Error('Dosya çok büyük.');
+      const wb = XLSX.read(await file.arrayBuffer(), { type:'array' });
+      const name = wb.SheetNames.find(n => tru(n) === T.sayfa) || wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, raw:true, defval:'' }).slice(0, 3001);
+      R = tpParse(tur, rows);
+      const ok = R.filter(x => x.rec && !x.var), dup = R.filter(x => x.var), bad = R.filter(x => x.err);
+      m.textContent = `${R.length} satır okundu: ${ok.length} kayıt eklenecek` + (dup.length ? `, ${dup.length} satır daha önce yüklenmiş (atlanacak)` : '') + (bad.length ? `, ${bad.length} satır hatalı (atlanacak)` : '') + '.';
+      const cols = T.cols().slice(0, 6);
+      q('#tp-prev').innerHTML = R.length ? `<div class="tablewrap lim"><table><thead><tr><th class="n">Satır</th><th>Durum</th>${cols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${R.slice(0, 300).map(x => `<tr><td class="n">${x.line}</td><td>${x.err ? `<span class="pill crit" title="${esc(x.err)}">Hatalı</span> <span class="muted" style="font-size:.8rem">${esc(x.err)}</span>` : x.var ? '<span class="pill">Zaten var</span>' : '<span class="pill ok">Eklenecek</span>'}</td>${cols.map(([, k]) => `<td><div class="clamp">${esc(x.rec ? (k === 'tarih' ? trD(x.rec[k]) : x.rec[k] ?? '') : '')}</div></td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
+      q('#tp-go').disabled = !ok.length || !S.db;
+    } catch (err) { m.textContent = 'Dosya okunamadı: ' + err.message; }
+  });
+  q('#tp-go').addEventListener('click', async () => { const btn = q('#tp-go'), m = q('#tp-msg'), prog = q('#tp-prog'); btn.disabled = true; prog.hidden = false;
+    const jobs = R.filter(x => x.rec && !x.var), now = new Date().toISOString(); let done = 0, fail = 0, i = 0, lastErr = '';
+    const worker = async () => { while (i < jobs.length) { const x = jobs[i++];
+      try { await S.db.doc(T.col + '/' + x.id).set({ ...x.rec, foto:[], ...(tur === 'dof' ? { kanitFoto:[] } : {}), olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:now, guncelleyen:S.meId, guncelleme:now, kaynak:'excel-toplu' }); x.var = true; }
+      catch (e) { fail++; lastErr = e.message; } done++; prog.firstElementChild.style.width = (done / jobs.length * 100) + '%'; } };
+    await Promise.all([worker(), worker(), worker()]);
+    m.textContent = `Bitti: ${done - fail} kayıt eklendi${fail ? `, ${fail} kayıt eklenemedi (${lastErr})` : ''}.`; if (!fail) toast(`${done} ${T.ad} kaydı eklendi`);
+  });
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-toplu]'); if (b && TOPLU[b.dataset.toplu]) openToplu(b.dataset.toplu); });
 
 /* ---------- KAYITLAR ---------- */
 /* Rapordaki tek kaynak: tarih aralığı + filtreler + arama uygulanmış aktivite listesi (eskiden yeniye) */
