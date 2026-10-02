@@ -464,8 +464,8 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
     </div>
     <div class="panel">
       <header><h2>Excel'den içe aktar</h2></header>
-      <p class="muted" style="margin:0 0 12px;font-size:.9rem">FAALİYET_RAPORU .xlsm dosyasını seçin. AKTİVİTELER sayfasındaki seçili yılın kayıtları (yalnızca aktivite listesindeki türlere giren satırlar) ve DÖF TÜM ZAMANLAR sayfasındaki o yılın + hâlâ açık olan DÖF'ler aktarılır. Aynı dosyayı tekrar yüklemek kopya oluşturmaz; uygulamada fotoğraf eklenmiş kayıtların üzerine yazılmaz.</p>
-      <div class="bar"><input type="file" id="imp-file" accept=".xlsx,.xlsm"><button class="btn primary" id="imp-go" disabled>İçe aktar</button></div>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">Haftalık FAALİYET_RAPORU .xlsm dosyasını seçin; dosya adındaki hafta (ör. "39.HAFTA") otomatik seçilir, isterseniz başka hafta veya tüm yıl seçebilirsiniz. AKTİVİTELER sayfasındaki kayıtlar tüm alanlarıyla gelir, yalnızca <b>raporlayan boş</b> gelir: Rapor → Aktivite kayıtları tablosunda "Ata…" ile kullanıcılardan seçilir (filtrede "Atanmamış" ile bulunur). DÖF TÜM ZAMANLAR sayfasından aynı haftanın DÖF'leri de aktarılır. Aynı dosyayı tekrar yüklemek kopya oluşturmaz; fotoğraf eklenmiş veya raporlayanı atanmış kayıtların üzerine yazılmaz.</p>
+      <div class="bar"><input type="file" id="imp-file" accept=".xlsx,.xlsm"><select class="btn sm" id="imp-hafta" aria-label="Aktarılacak hafta" hidden></select><button class="btn primary" id="imp-go" disabled>İçe aktar</button><button class="btn" id="imp-esle" type="button">Raporlayanları eşleştir</button></div>
       <p class="muted" id="imp-msg" style="font-size:.88rem"></p>
       <div class="progress" id="imp-prog" hidden><div></div></div>
     </div>
@@ -495,6 +495,11 @@ const DEF = {
 /* Eski lokasyon adlarını (ANKARA MTX, ESENYURT LTC, SAMSUN OFİS…) yeni listeye eşler; eşleşmeyen "Diğer" olur */
 function normLok(v){ const t = tru(v); if (!t) return ''; const L = opt('lokasyon').length ? opt('lokasyon') : DEF.lokasyonlar; const hit = L.find(l => l !== 'Diğer' && t.startsWith(tru(l))); return hit || (L.includes('Diğer') ? 'Diğer' : String(v).trim()); }
 const plakaNorm = v => tru(v).replace(/\s+/g, '');
+/* Ad soyad kutuları kutudan çıkınca otomatik düzeltilir */
+document.addEventListener('change', e => { const t = e.target; if (t && t.matches && t.matches('#a-personel, #u-ad, #au-ad, [data-isim]')) { const v = nameCase(t.value); if (v !== t.value) t.value = v; } }, true);
+/* Ad soyad: her kelimenin ilk harfi büyük, kalanı küçük (Türkçe kurallarıyla: ALİ IŞIK → Ali Işık) */
+const nameCase = v => String(v ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR').replace(/(^|[\s\-'’(.,/])(\p{L})/gu, (m, a, b) => a + b.toLocaleUpperCase('tr-TR'));
+const rapBul = v => { const t = tru(v); return t ? (RAP.find(x => tru(x) === t) || '') : ''; };
 const withLok = r => ({ ...r, lokasyon: normLok(r.lokasyon), ...(r.plaka ? { plaka: plakaNorm(r.plaka) } : {}) });
 /* Alt yüklenici: kayıtta yoksa eski Excel satırlarındaki Personel sütunundan (ör. "220 BİLİŞİM") çıkarılır */
 const altList = () => uniq([...opt('altYuklenici'), ...DEF.altyukleniciler]);
@@ -614,8 +619,8 @@ const S = {
   db:null, files:null, meId:null, canWrite:true, ready:false,
   cfg:{...DEF}, months:{}, dofs:[], kazalar:[], yil:cw.y, hafta:cw.w, tab:'aktivite', unsub:[], names:{}
 };
-const acts = () => S._ac || (S._ac = Object.values(S.months).flat().map(clean).filter(Boolean).map(r => normAkt(withAlt(withLok(r)))).filter(Boolean));
-Object.defineProperty(S, 'dofs', { get(){ return S._dc || (S._dc = (S._dofsRaw || []).map(clean).filter(Boolean).map(withLok)); }, configurable:true });
+const acts = () => S._ac || (S._ac = Object.values(S.months).flat().map(clean).filter(Boolean).map(r => normAkt(withAlt(withLok(r)))).filter(Boolean).map(a => ({ ...a, raporlayan:nameCase(a.raporlayan), personel:nameCase(a.personel), kaynakRaporlayan:nameCase(a.kaynakRaporlayan) })));
+Object.defineProperty(S, 'dofs', { get(){ return S._dc || (S._dc = (S._dofsRaw || []).map(clean).filter(Boolean).map(withLok).map(d => ({ ...d, bildiren:nameCase(d.bildiren) }))); }, configurable:true });
 Object.defineProperty(S, 'cezalar', { get(){ return S._zc || (S._zc = (S._czRaw || []).map(clean).filter(Boolean).filter(r => !r.tip || r.tip === 'Ceza').map(r => ({ ...withLok(r), tip:'Ceza', belge: r.belge || [] }))); }, configurable:true });
 Object.defineProperty(S, 'kazalar', { get(){ return S._kc || (S._kc = (S._kazRaw || []).map(clean).filter(Boolean).map(r => kazaNorm(withLok(r)))); }, configurable:true });
 applyFields();
@@ -718,6 +723,7 @@ function fieldHtml(f){
   const id = 'a-' + f.key, req = f.zorunlu ? ' <span class="req">*</span>' : '', ph = f.yer ? ` placeholder="${esc(f.yer)}"` : '';
   const kos = f.kosul?.degerler?.length ? ` data-kosul="${esc(f.kosul.alan)}"` : '';
   const wrap = (inner, full) => `<div class="fld${full ? ' full' : ''}" data-key="${esc(f.key)}"${kos}><label for="${esc(id)}">${esc(f.ad)}${req}</label>${inner}</div>`;
+  if (f.key === 'raporlayan' && !S.isAdmin) { const me = nameCase(AUTH.me?.ad); return wrap(`<select id="${esc(id)}" disabled title="Kayıtlar sizin adınıza girilir">${opts([me], me)}</select>`); }
   if (f.tip === 'liste') { const o = f.key === 'raporlayan' ? RAP : (f.secenekler || []); return wrap(`<select id="${esc(id)}">${opts(o, '', f.zorunlu ? 'Seçin' : '—')}</select>`); }
   if (f.tip === 'sayi') return wrap(`<input type="number" id="${esc(id)}" min="0" inputmode="numeric"${ph}>`);
   if (f.tip === 'uzun') return wrap(`<textarea id="${esc(id)}"${ph}></textarea>`, true);
@@ -735,13 +741,13 @@ function fieldVisible(fs, valOf){
 }
 function aktFormVis(){ const v = fieldVisible(activeFields(), k => document.getElementById('a-' + k)?.value || ''); document.querySelectorAll('#f-akt [data-key]').forEach(w => { w.hidden = !v(w.dataset.key); }); }
 function rAkt(){
-  const f = $('#f-akt'); const sig = JSON.stringify(activeFields()) + '|' + (AUTH.me?.ad || '') + '|' + RAP.join(',');
+  const f = $('#f-akt'); const sig = JSON.stringify(activeFields()) + '|' + (AUTH.me?.ad || '') + '|' + S.isAdmin + '|' + RAP.join(',');
   if (f._sig !== sig) {
     const keep = {}; f.querySelectorAll('input:not([type=file]),select,textarea').forEach(el => { if (el.id) keep[el.id] = el.value; });
     f.innerHTML = `<div class="fld"><label for="a-tarih">Tarih <span class="req">*</span></label><input type="date" id="a-tarih"></div>` + activeFields().map(fieldHtml).join('') + `<div class="actions"><button class="btn primary" type="submit" id="a-save">Kaydet</button><span class="muted" id="a-msg"></span></div>`;
     Object.entries(keep).forEach(([k, v]) => { const el = document.getElementById(k); if (el && v !== '' && (el.tagName !== 'SELECT' || [...el.options].some(o => o.value === v))) el.value = v; });
     if (!$('#a-tarih').value) $('#a-tarih').value = ymd(new Date());
-    const r = $('#a-raporlayan'); if (r && !r.value) { const v = [tru(AUTH.me?.ad), ls.get('isg.me')].find(x => x && [...r.options].some(o => o.value === x)); if (v) r.value = v; }
+    const r = $('#a-raporlayan'); if (r && !r.value) { const v = [nameCase(AUTH.me?.ad), ls.get('isg.me')].find(x => x && [...r.options].some(o => o.value === x)); if (v) r.value = v; }
     bindDrop(f); f._sig = sig;
   }
   if (!f._init) { f._init = true; f.addEventListener('submit', saveAkt); f.addEventListener('change', e => { if (e.target.tagName === 'SELECT') aktFormVis(); if (e.target.id === 'a-raporlayan') { ls.set('isg.me', e.target.value); rAktList(); } }); }
@@ -772,7 +778,7 @@ async function saveAkt(e){
     for (const f of vis) { const el = document.getElementById('a-' + f.key);
       if (f.tip === 'foto') rec[f.key] = await uploadAll('a-' + f.key, msg);
       else if (f.tip === 'sayi') rec[f.key] = el.value === '' ? null : Number(el.value);
-      else rec[f.key] = f.key === 'plaka' ? plakaNorm(el.value) : el.value.trim(); }
+      else rec[f.key] = f.key === 'plaka' ? plakaNorm(el.value) : f.key === 'personel' ? nameCase(el.value) : el.value.trim(); }
     msg.textContent = 'Kaydediliyor…';
     await S.db.collection('aktiviteler').doc().set(rec);
     const STICKY = ['raporlayan','aktivite','lokasyon','altYuklenici'];
@@ -1014,15 +1020,16 @@ function openKaza(id, tip){
 function kayitList(){
   const fv = {}; document.querySelectorAll('#k-filters select').forEach(x => { if (x.value) fv[x.dataset.key] = x.value; });
   const q = tru($('#k-q').value), cols = activeFields().filter(f => f.tip !== 'foto');
-  const list = acts().filter(a => inRange(a.tarih) && Object.entries(fv).every(([k, v]) => a[k] === v) && (!q || tru(cols.map(f => a[f.key] ?? '').join(' ')).includes(q)))
+  const list = acts().filter(a => inRange(a.tarih) && Object.entries(fv).every(([k, v]) => v === '__bos__' ? !a[k] : a[k] === v) && (!q || tru(cols.map(f => a[f.key] ?? '').join(' ')).includes(q)))
     .sort((a,b) => (a.tarih + (a.olusturma||'')).localeCompare(b.tarih + (b.olusturma||'')));
-  const desc = [...Object.entries(fv).map(([k, v]) => `${fld(k)?.ad || k}: ${v}`), ...(q ? [`Arama: "${$('#k-q').value.trim()}"`] : [])];
+  const desc = [...Object.entries(fv).map(([k, v]) => `${fld(k)?.ad || k}: ${v === '__bos__' ? 'Atanmamış' : v}`), ...(q ? [`Arama: "${$('#k-q').value.trim()}"`] : [])];
   return { list, desc };
 }
 function uzmanRows(list){
   const cols = [...GROUPS.map(g => g[0]), 'Diğer'];
-  const people = uniq([...S.cfg.uzmanlar, ...list.map(a => a.raporlayan)]);
-  const rows = people.map(p => { const mine = list.filter(a => a.raporlayan === p); return [p, ...cols.map(g => mine.filter(a => groupOf(a.aktivite) === g).length), mine.length]; }).filter(r => r[r.length-1] > 0 || S.cfg.uzmanlar.includes(r[0]));
+  const rp = a => a.raporlayan || '(Atanmamış)';
+  const people = uniq([...S.cfg.uzmanlar, ...list.map(rp)]);
+  const rows = people.map(p => { const mine = list.filter(a => rp(a) === p); return [p, ...cols.map(g => mine.filter(a => groupOf(a.aktivite) === g).length), mine.length]; }).filter(r => r[r.length-1] > 0 || S.cfg.uzmanlar.includes(r[0]));
   const tot = ['Toplam', ...cols.map((_, i) => rows.reduce((s, r) => s + r[i+1], 0)), list.length];
   return { head:['Uzman', ...cols, 'Toplam'], rows, tot };
 }
@@ -1038,11 +1045,11 @@ function rKayit(){
   const box = $('#k-filters'); const cur = {}; box.querySelectorAll('select').forEach(x => cur[x.dataset.key] = x.value);
   const sig = JSON.stringify(lf.map(f => [f.key, f.ad]));
   if (box._sig !== sig) { box.innerHTML = lf.map(f => `<select class="btn sm" data-key="${esc(f.key)}" aria-label="${esc(f.ad)}"></select>`).join(''); box._sig = sig; }
-  box.querySelectorAll('select').forEach(x => { const f = lf.find(y => y.key === x.dataset.key); const vals = uniq([...(f.secenekler || []), ...all.map(a => a[f.key]).filter(Boolean)]); x.innerHTML = opts(vals, cur[f.key] || '', `Tümü · ${f.ad}`); });
+  box.querySelectorAll('select').forEach(x => { const f = lf.find(y => y.key === x.dataset.key); const vals = uniq([...(f.key === 'raporlayan' ? RAP : (f.secenekler || [])), ...all.map(a => a[f.key]).filter(Boolean)]); x.innerHTML = opts(vals, cur[f.key] || '', `Tümü · ${f.ad}`) + (f.key === 'raporlayan' ? `<option value="__bos__"${cur[f.key] === '__bos__' ? ' selected' : ''}>Atanmamış</option>` : ''); });
   const cols = activeFields().filter(f => f.tip !== 'foto');
   const list = kayitList().list.slice().reverse();
   $('#k-count').textContent = `${list.length} kayıt`;
-  const cell = (f, a) => { const v = a[f.key]; if (f.key === 'sonuc') return `<td>${sonucPill(v)}</td>`; if (f.tip === 'sayi') return `<td class="n">${esc(v ?? '')}</td>`; if (f.tip === 'uzun') return `<td><div class="clamp">${esc(v || '')}</div></td>`; return `<td>${esc(v || '')}</td>`; };
+  const cell = (f, a) => { const v = a[f.key]; if (f.key === 'raporlayan' && !v && S.isAdmin) return `<td><select class="btn sm" data-rapata="${esc(a.id)}" aria-label="Raporlayan ata" title="${esc(a.kaynakRaporlayan ? 'Excel\'deki ad: ' + a.kaynakRaporlayan : '')}">${opts(RAP, '', 'Ata…')}</select></td>`; if (f.key === 'sonuc') return `<td>${sonucPill(v)}</td>`; if (f.tip === 'sayi') return `<td class="n">${esc(v ?? '')}</td>`; if (f.tip === 'uzun') return `<td><div class="clamp">${esc(v || '')}</div></td>`; return `<td>${esc(v || '')}</td>`; };
   const n = cols.length + 4, shown = list.slice(0, 500);
   $('#k-table').innerHTML = `<thead><tr><th>Tarih</th><th class="n">Hafta</th>${cols.map(f => `<th${f.tip === 'sayi' ? ' class="n"' : ''}>${esc(f.ad)}</th>`).join('')}<th class="n">Foto</th><th></th></tr></thead><tbody>` +
     (shown.length ? shown.map(a => `<tr><td class="mono">${trD(a.tarih)}</td><td class="n">${esc(a.hafta ?? '')}</td>${cols.map(f => cell(f, a)).join('')}<td class="n">${photoCell(a.foto, a)}</td><td>${(S.isAdmin || (a.olusturan && a.olusturan === S.meId) || (a.olusturanEmail && a.olusturanEmail === AUTH.me?.email)) ? `<button class="btn sm danger" data-delakt="${esc(a.id)}">Sil</button>` : ''}</td></tr>`).join('')
@@ -1050,6 +1057,9 @@ function rKayit(){
     (list.length > 500 ? `<tr><td colspan="${n}" class="muted">İlk 500 kayıt gösteriliyor; tamamı için "Excel ve özetler" bölümünden raporu indirin.</td></tr>` : '') + '</tbody>';
 }
 $('#k-filters').addEventListener('change', render);
+/* Excel'den gelen kayıtlarda raporlayan boş gelir; kullanıcılardan seçilerek atanır */
+document.addEventListener('change', async e => { const s = e.target.closest('[data-rapata]'); if (!s || !S.isAdmin || !s.value || !RAP.includes(s.value)) return;
+  s.disabled = true; try { await S.db.doc('aktiviteler/' + s.dataset.rapata).update({ raporlayan:s.value, raporlayanAtandi:true, raporlayanAtayan:AUTH.me?.email || '' }); toast(`Raporlayan atandı: ${s.value}`); } catch (err) { s.disabled = false; s.value = ''; toast('Atanamadı: ' + err.message); } });
 $('#k-q').addEventListener('input', render);
 document.addEventListener('click', async e => { const b = e.target.closest('[data-delakt]'); if (!b) return; if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc('aktiviteler/' + b.dataset.delakt).delete(); toast('Kayıt silindi'); } catch (err) { toast('Silinemedi: ' + (err.code||'')); } });
 
@@ -1067,7 +1077,7 @@ function photoFolders(){
     f.turler.add(tur); items.forEach(x => f.items.push(x)); };
   acts().filter(a => inR(a.tarih)).forEach(a => put(a.tarih, a.raporlayan, a.lokasyon, a.altYuklenici, (a.foto||[]).map(id => ({ id, tur:a.aktivite, cap:`${a.aktivite}${a.aciklama ? ' · ' + a.aciklama : ''}` })), a.aktivite));
   S.dofs.filter(d => inR(d.tarih)).forEach(d => put(d.tarih, d.bildiren, d.lokasyon, d.altYuklenici, [...(d.foto||[]).map(id => ({ id, tur:`DÖF ${d.formNo||''}`.trim(), cap:`DÖF ${d.formNo||''} · ${d.gozlem||''}` })), ...(d.kanitFoto||[]).map(id => ({ id, tur:`DÖF kanıt ${d.formNo||''}`.trim(), cap:`DÖF ${d.formNo||''} kapanış kanıtı` }))], 'DÖF'));
-  S.kazalar.filter(k => inR(k.tarih)).forEach(k => put(k.tarih, tru(hesapAd(k.olusturanEmail)) || k.supervizor, k.lokasyon, k.altYuklenici, (k.foto||[]).map(id => ({ id, tur:k.olayTipi, cap:`${k.olayTipi} · ${k.tur || ''}` })), k.olayTipi));
+  S.kazalar.filter(k => inR(k.tarih)).forEach(k => put(k.tarih, nameCase(hesapAd(k.olusturanEmail)) || k.supervizor, k.lokasyon, k.altYuklenici, (k.foto||[]).map(id => ({ id, tur:k.olayTipi, cap:`${k.olayTipi} · ${k.tur || ''}` })), k.olayTipi));
   const q = tru($('#ph-q').value);
   return Object.values(F).filter(f => !q || tru(f.name).includes(q)).sort((a,b) => b.tarih.localeCompare(a.tarih) || a.name.localeCompare(b.name, 'tr'));
 }
@@ -1134,8 +1144,8 @@ function perfRows(list){
   const types = uniq(S.cfg.aktiviteler.filter(t => list.some(a => a.aktivite === t)).concat(list.map(a => a.aktivite)));
   const multi = uniq(list.map(a => a.haftaYil)).length > 1;
   const wk = a => (a.haftaYil || 0) * 100 + (a.hafta || 0);
-  const keys = uniq(list.map(a => `${wk(a)}|${a.raporlayan}`)).sort((a,b) => { const [wa,ra] = a.split('|'), [wb,rb] = b.split('|'); return (+wa - +wb) || ra.localeCompare(rb,'tr'); });
-  return { types, rows: keys.map(k => { const [w,r] = k.split('|'); const mine = list.filter(a => String(wk(a)) === w && a.raporlayan === r); const n = +w; return [multi ? `${Math.floor(n/100)}/${n%100}` : n % 100, r, ...types.map(t => mine.filter(a => a.aktivite === t).length), mine.length]; }) };
+  const keys = uniq(list.map(a => `${wk(a)}|${a.raporlayan || '(Atanmamış)'}`)).sort((a,b) => { const [wa,ra] = a.split('|'), [wb,rb] = b.split('|'); return (+wa - +wb) || ra.localeCompare(rb,'tr'); });
+  return { types, rows: keys.map(k => { const [w,r] = k.split('|'); const mine = list.filter(a => String(wk(a)) === w && (a.raporlayan || '(Atanmamış)') === r); const n = +w; return [multi ? `${Math.floor(n/100)}/${n%100}` : n % 100, r, ...types.map(t => mine.filter(a => a.aktivite === t).length), mine.length]; }) };
 }
 function altRows(list, dofs, kz){
   const names = uniq([...S.cfg.altyukleniciler, ...list.map(a => a.altYuklenici), ...dofs.map(d => d.altYuklenici), ...kz.map(k => k.altYuklenici)]);
@@ -1388,7 +1398,7 @@ $('#imp-file').addEventListener('change', async e => {
       const d = parseD(tarih); if (d.getFullYear() !== S.yil) return;
       const nr = normAkt(rec); if (!nr) return;
       const iw = isoWeek(d);
-      A.push(['a-' + fnv(canon) + (n ? '-' + n : ''), { ...nr, lokasyon:normLok(nr.lokasyon), yil:d.getFullYear(), ay:d.getMonth()+1, donem:tarih.slice(0,7), hafta:iw.w, haftaYil:iw.y, foto:[], kaynak:'excel' }]);
+      A.push(['a-' + fnv(canon) + (n ? '-' + n : ''), { ...nr, plaka:plakaNorm(nr.plaka || ''), personel:nameCase(nr.personel), raporlayan:rapBul(nr.raporlayan), kaynakRaporlayan:nameCase(nr.raporlayan), lokasyon:normLok(nr.lokasyon), yil:d.getFullYear(), ay:d.getMonth()+1, donem:tarih.slice(0,7), hafta:iw.w, haftaYil:iw.y, foto:[], kaynak:'excel' }]);
     });
     const Dd = [];
     rowsOf('DÖF TÜM ZAMANLAR').slice(1).forEach(r => {
@@ -1396,23 +1406,41 @@ $('#imp-file').addEventListener('change', async e => {
       const durum = s(r[18]), y = +tarih.slice(0,4);
       if (y !== S.yil && durum !== 'Devam Ediyor') return;
       const num = v => typeof v === 'number' ? v : null;
-      Dd.push(['d-' + fnv(s(r[2]) + '|' + tarih), { tarih, yil:y, formNo:s(r[2]), bildiren:tru(r[3]), lokasyon:normLok(r[4]), firma:s(r[5]), bildirimTuru:s(r[6]), uygunsuzlukTuru:s(r[7]), gozlem:s(r[8]), olasilik:num(r[9]), siddet:num(r[10]), aksiyon:s(r[13]), sorumlu:s(r[14]).replace(/\n+/g, ', '), hedefTarih:dOf(r[15]), kapanisTarih:dOf(r[16]), durum, aciklama:s(r[19]), foto:[], kanitFoto:[], kaynak:'excel' }]);
+      Dd.push(['d-' + fnv(s(r[2]) + '|' + tarih), { tarih, yil:y, hafta:isoWeek(parseD(tarih)).w, formNo:s(r[2]), bildiren:nameCase(r[3]), lokasyon:normLok(r[4]), firma:s(r[5]), bildirimTuru:s(r[6]), uygunsuzlukTuru:s(r[7]), gozlem:s(r[8]), olasilik:num(r[9]), siddet:num(r[10]), aksiyon:s(r[13]), sorumlu:s(r[14]).replace(/\n+/g, ', '), hedefTarih:dOf(r[15]), kapanisTarih:dOf(r[16]), durum, aciklama:s(r[19]), foto:[], kanitFoto:[], kaynak:'excel' }]);
     });
     IMP = { A, Dd };
-    msg.textContent = `${S.yil} yılına ait ${A.length} aktivite ve ${Dd.length} DÖF bulundu.`;
-    $('#imp-go').disabled = !S.db || (!A.length && !Dd.length);
+    /* Hafta seçimi: dosya adında "39.HAFTA" gibi bir ifade varsa o hafta seçili gelir */
+    const weeks = [...new Set(A.map(([, d]) => d.hafta))].sort((a, b) => b - a);
+    const fw = +((file.name.match(/(\d{1,2})\s*\.?\s*HAFTA/i) || [])[1] || 0);
+    const hs = $('#imp-hafta'); hs.innerHTML = `<option value="0">Tüm yıl (${S.yil})</option>` + weeks.map(w => `<option value="${w}"${w === fw ? ' selected' : ''}>${w}. hafta · ${weekLabel(S.yil, w)}</option>`).join(''); hs.hidden = !weeks.length;
+    impSummary();
   } catch (err) { msg.textContent = 'Dosya okunamadı: ' + (err.message || err); }
 });
+function impSel(){ const w = +($('#imp-hafta').value || 0); return { w, A: IMP.A.filter(([, d]) => !w || d.hafta === w), Dd: IMP.Dd.filter(([, d]) => !w || (d.yil === S.yil && d.hafta === w)) }; }
+function impSummary(){ if (!IMP) return; const { w, A, Dd } = impSel();
+  const bos = A.filter(([, d]) => !d.raporlayan), adlar = uniq(bos.map(([, d]) => d.kaynakRaporlayan));
+  $('#imp-msg').textContent = `${w ? w + '. hafta' : S.yil + ' yılı'}: ${A.length} aktivite ve ${Dd.length} DÖF aktarılacak. ${A.length - bos.length} aktivitenin raporlayanı kullanıcılarla eşleşti.` + (bos.length ? ` ${bos.length} aktivitede raporlayan boş kalacak (kullanıcı değil: ${adlar.join(', ') || 'Excel\'de boş'}). Bu kişiler kullanıcı olarak eklenince "Raporlayanları eşleştir" ile doldurulur.` : '');
+  $('#imp-go').disabled = !S.db || (!A.length && !Dd.length); }
+$('#imp-hafta').addEventListener('change', impSummary);
+/* Raporlayanı boş olan Excel kayıtlarını, Excel'deki ad bir kullanıcıyla eşleşiyorsa doldurur */
+$('#imp-esle').addEventListener('click', async () => { if (!S.isAdmin) return; const m = $('#imp-msg'), btn = $('#imp-esle');
+  const todo = acts().filter(a => !a.raporlayan && rapBul(a.kaynakRaporlayan));
+  const kalan = acts().filter(a => !a.raporlayan).length - todo.length;
+  if (!todo.length) return m.textContent = `Eşleşecek kayıt yok.${kalan ? ` ${kalan} kaydın Excel'deki raporlayanı kullanıcı listesinde yok; bu kişileri kullanıcı olarak ekleyin veya Rapor → Aktivite kayıtları'nda "Ata…" ile atayın.` : ''}`;
+  btn.disabled = true; let ok = 0;
+  for (const a of todo) { try { await S.db.doc('aktiviteler/' + a.id).update({ raporlayan:rapBul(a.kaynakRaporlayan) }); ok++; } catch {} }
+  btn.disabled = false; m.textContent = `${ok} kaydın raporlayanı dolduruldu.${kalan ? ` ${kalan} kayıt boş kaldı (Excel'deki ad kullanıcı değil).` : ''}`; });
 $('#imp-go').addEventListener('click', async () => {
-  if (!IMP || !S.db) return;
+  if (!IMP || !S.db) return; const SEL = impSel();
   const btn = $('#imp-go'), msg = $('#imp-msg'), prog = $('#imp-prog'); btn.disabled = true; prog.hidden = false;
   const existsA = new Map(acts().map(a => [a.id, a])), existsD = new Map(S.dofs.map(d => [d.id, d]));
-  const protectedRec = r => r && (r.kaynak !== 'excel' || (r.foto||[]).length || (r.kanitFoto||[]).length);
-  const jobs = [...IMP.A.filter(([id]) => !protectedRec(existsA.get(id))).map(([id, d]) => ['aktiviteler/' + id, d]), ...IMP.Dd.filter(([id]) => !protectedRec(existsD.get(id))).map(([id, d]) => ['dof/' + id, d])];
+  const protectedRec = r => r && (r.kaynak !== 'excel' || r.raporlayanAtandi || (r.foto||[]).length || (r.kanitFoto||[]).length);
+  const jobs = [...SEL.A.filter(([id]) => !protectedRec(existsA.get(id))).map(([id, d]) => ['aktiviteler/' + id, d]), ...SEL.Dd.filter(([id]) => !protectedRec(existsD.get(id))).map(([id, d]) => ['dof/' + id, d])];
   let done = 0, fail = 0, i = 0;
   const worker = async () => { while (i < jobs.length) { const [p, d] = jobs[i++]; try { await S.db.doc(p).set(d); } catch (e) { if (e?.code === 'resource-exhausted' || e?.code === 'unavailable') { await new Promise(r => setTimeout(r, 1500 + Math.random()*1000)); try { await S.db.doc(p).set(d); } catch { fail++; } } else if (e?.code === 'permission-denied') { fail++; i = jobs.length; msg.textContent = e.message; } else fail++; } done++; prog.firstElementChild.style.width = (done / jobs.length * 100) + '%'; if (done % 20 === 0) msg.textContent = `Aktarılıyor ${done}/${jobs.length}…`; } };
   await Promise.all([worker(), worker(), worker()]);
-  msg.textContent = `Bitti: ${done - fail} kayıt aktarıldı${fail ? `, ${fail} kayıt aktarılamadı (tekrar deneyin)` : ''}.`;
+  const kept = SEL.A.length + SEL.Dd.length - jobs.length;
+  msg.textContent = `Bitti: ${done - fail} kayıt aktarıldı${kept ? `, ${kept} kayıt uygulamada değiştirildiği (fotoğraf / atanmış raporlayan) için korundu` : ''}${fail ? `, ${fail} kayıt aktarılamadı (tekrar deneyin)` : ''}.`;
   btn.disabled = false;
 });
 
@@ -1564,7 +1592,7 @@ function showAuth(step, ctx = {}){
       'Bu ekran yalnızca bir kez, ilk yönetici için kullanılır. Hesap oluşturulunca e-posta doğrulama ve authenticator adımları gelir.');
     $('#au-back').addEventListener('click', () => { history.replaceState(null, '', location.pathname + location.search); showAuth('login'); });
     $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go');
-      const ad = $('#au-ad').value.trim(), pw = $('#au-pw').value;
+      const ad = nameCase($('#au-ad').value), pw = $('#au-pw').value;
       if (!adm) return m.textContent = 'config.js içinde ilkYonetici e-postası tanımlı değil.';
       if (!ad) return m.textContent = 'Adınızı girin.';
       if (!pwRule(pw)) return m.textContent = PW_HINT; if (pw !== $('#au-pw2').value) return m.textContent = 'Şifreler aynı değil.';
@@ -1597,7 +1625,7 @@ function showAuth(step, ctx = {}){
       <div class="fld"><label for="au-ad">Ad soyad</label><input id="au-ad" autocomplete="name" value="${esc(ls.get('isg.kurulumAd') || '')}"></div>
       <div class="actions"><button class="btn primary" type="submit" id="au-go">Devam</button><button class="btn" type="button" id="au-out">Çıkış</button><span class="err" id="au-msg"></span></div></form>`, esc(u.email));
     bindOut();
-    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), ad = $('#au-ad').value.trim();
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), ad = nameCase($('#au-ad').value);
       if (!ad) return m.textContent = 'Adınızı girin.';
       busy(btn, m, 'Kaydediliyor…');
       try { const now = new Date().toISOString(); await S.db.doc('kullanicilar/' + u.uid).set({ email:u.email, ad, rol:'admin', aktif:true, geciciSifre:false, olusturan:u.email, olusturma:now }); try { localStorage.removeItem('isg.kurulumAd'); } catch {} route(); }
@@ -1670,7 +1698,7 @@ async function route(){
   let mfa = false; try { mfa = await FB.auth.secondFactor(); } catch {}
   if (my !== AUTH.seq) return;
   if (!mfa) { AUTH.flash = 'Lütfen şifreniz ve authenticator kodunuzla yeniden giriş yapın.'; return FB.auth.signOut(); }
-  loginOk({ uid:u.uid, ...p, email:u.email });
+  loginOk({ uid:u.uid, ...p, ad:nameCase(p.ad), email:u.email });
 }
 
 let lastAct = Date.now();
@@ -1689,8 +1717,8 @@ function loginOk(h, silent){
 }
 function watchUsers(){
   AUTH.usersUnsub = S.db.collection('kullanicilar').onSnapshot(snap => {
-    AUTH.users = Object.fromEntries(snap.docs.map(d => [d.id, { uid:d.id, ...d.data() }]));
-    RAP = uniq(Object.values(AUTH.users).filter(u => u.aktif === true).map(u => tru(u.ad))).sort((a, b) => a.localeCompare(b, 'tr')); applyFields(); render();
+    AUTH.users = Object.fromEntries(snap.docs.map(d => { const v = d.data(); return [d.id, { uid:d.id, ...v, ad:nameCase(v.ad) }]; }));
+    RAP = uniq(Object.values(AUTH.users).filter(u => u.aktif === true).map(u => nameCase(u.ad))).sort((a, b) => a.localeCompare(b, 'tr')); applyFields(); render();
     const me = AUTH.me && AUTH.users[AUTH.me.uid];
     if (AUTH.me && (!me || me.aktif !== true)) return logout('Hesabınız pasifleştirildi veya silindi.');
     if (AUTH.me && me.rol !== AUTH.me.rol) loginOk({ ...AUTH.me, ...me }, true);
@@ -1714,7 +1742,7 @@ function rKullanici(){
     $('#u-gen').addEventListener('click', () => { $('#u-pw').value = genPw(); });
     $('#u-pw').value = genPw();
     f.addEventListener('submit', async e => { e.preventDefault(); const m = $('#u-msg'), btn = f.querySelector('button[type=submit]');
-      const ad = $('#u-ad').value.trim(), email = $('#u-mail').value.trim().toLowerCase(), rol = $('#u-rol').value, pw = $('#u-pw').value.trim();
+      const ad = nameCase($('#u-ad').value), email = $('#u-mail').value.trim().toLowerCase(), rol = $('#u-rol').value, pw = $('#u-pw').value.trim();
       if (!ad || !okMail(email)) return m.textContent = 'Ad ve geçerli bir e-posta girin.';
       if (Object.values(AUTH.users).some(h => h.email === email)) return m.textContent = 'Bu e-posta ile bir kullanıcı zaten var.';
       if (Object.values(AUTH.users).some(h => tru(h.ad) === tru(ad))) return m.textContent = 'Bu adla bir kullanıcı zaten var. Raporlayan listesinde karışmaması için ad soyadı ayırt edici yazın.';
