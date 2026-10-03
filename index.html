@@ -11,7 +11,7 @@
 /* Firebase bağlantı katmanı: uygulamanın geri kalanı yalnızca window.FB üzerinden konuşur */
 import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, getMultiFactorResolver, TotpMultiFactorGenerator, multiFactor, sendEmailVerification, reload, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
-import { getFirestore, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { getFirestore, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL, getBlob, deleteObject } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js';
 
@@ -61,10 +61,19 @@ if (!cfg.apiKey || !cfg.projectId) {
       onSnapshot: (fn, onErr) => onSnapshot(q(), s => fn({ docs:s.docs.map(snapD) }), e => onErr && onErr(err(e)))
     };
   };
-  /* Toplu yazma: [{path, op:'set'|'update', data}] → 50'lik paketler halinde tek seferde gönderilir */
-  const batch = async (ops, onProg) => { for (let i = 0; i < ops.length; i += 50) { const b = writeBatch(fs), part = ops.slice(i, i + 50);
-      for (const o of part) o.op === 'update' ? b.update(doc(fs, o.path), o.data) : b.set(doc(fs, o.path), o.data);
-      await W(b.commit()); onProg && onProg(Math.min(i + 50, ops.length)); } };
+  /* Toplu yazma: [{path, op:'set'|'update', data}] → 12 paralel tekil yazma.
+     (writeBatch kullanılmaz: güvenlik kuralları her yazmada profil okuduğu için Firestore'un toplu yazma başına
+     20 okuma sınırına takılıp tüm paketi reddediyordu.) Geçici hatalarda bir kez yeniden dener. */
+  const batch = async (ops, onProg) => { let i = 0, ok = 0; const fails = [];
+    const one = o => o.op === 'update' ? updateDoc(doc(fs, o.path), o.data) : setDoc(doc(fs, o.path), o.data);
+    const code = e => String(e?.code || '').replace(/^firestore\//, '');
+    const worker = async () => { while (i < ops.length) { const o = ops[i++];
+      try { await one(o); }
+      catch (e) { if (['resource-exhausted', 'unavailable', 'aborted', 'deadline-exceeded'].includes(code(e))) { await new Promise(r => setTimeout(r, 1200 + Math.random() * 800)); try { await one(o); } catch (e2) { fails.push(e2); continue; } }
+        else { fails.push(e); if (code(e) === 'permission-denied') i = ops.length; continue; } }
+      ok++; onProg && onProg(ok); } };
+    await Promise.all(Array.from({ length:Math.min(12, ops.length) }, worker));
+    if (fails.length) throw err(fails[0]); };
   const db = { doc:wrapDoc, collection:p => coll(p), batch };
 
   /* Dosyalar: her dosya dosya/<32 hex> yolunda; kayıtlarda yalnızca kimliği saklanır */
@@ -225,6 +234,14 @@ tfoot td{font-weight:700;background:var(--surface-2)}
 form.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fld.full{grid-column:1/-1}
+.pcombo{position:relative}
+.pcombo-list{position:absolute;z-index:40;left:0;min-width:100%;width:max(100%,min(440px,calc(100vw - 32px)));top:100%;margin-top:4px;max-height:280px;overflow:auto;background:var(--surface,#fff);border:1px solid var(--line,#ddd);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.pcombo-list[hidden]{display:none}
+.pcombo-item{padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.pcombo-item > span:first-child{min-width:0}.pcombo-item small{color:var(--muted);font-size:.8rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pcombo-item .pill{flex:none}
+.pcombo-item.on,.pcombo-item:hover{background:var(--surface-2,#f3efe6)}
+.pcombo-bos{padding:10px 12px;color:var(--muted);font-size:.88rem}
+input.p-gecersiz{border-color:var(--crit) !important}
 .fld label{font-size:.8rem;font-weight:700;letter-spacing:.03em;color:var(--muted);text-transform:uppercase}
 .fld label .req{color:var(--accent-ink)}
 .fld input,.fld select,.fld textarea{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;min-height:42px;width:100%}
@@ -852,7 +869,8 @@ function fieldHtml(f){
   if (f.tip === 'sayi') return wrap(`<input type="number" id="${esc(id)}" min="0" inputmode="numeric"${ph}>`);
   if (f.tip === 'uzun') return wrap(`<textarea id="${esc(id)}"${ph}></textarea>`, true);
   if (f.tip === 'foto') return wrap(`<div class="drop" data-for="${esc(id)}"><input type="file" id="${esc(id)}" accept="image/*" multiple><div class="thumbs"></div><span class="hint">${esc(f.yer || "Fotoğraflar 1600 px'e küçültülerek yüklenir. Hafta ve lokasyona göre klasörlenir.")}</span></div>`, true);
-  return wrap(`<input id="${esc(id)}"${ph}${f.key === 'personel' ? ' list="personel-dl" autocomplete="off"' : ''}>`);
+  if (f.key === 'personel') return wrap(`<div class="pcombo"><input id="${esc(id)}" placeholder="Aramak için isim yazın, listeden seçin" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"><div class="pcombo-list" hidden role="listbox"></div></div>`);
+  return wrap(`<input id="${esc(id)}"${ph}>`);
 }
 /* Koşullu alanlar: bir alan, başka bir liste alanında seçilen değere göre açılır. Zincir desteklenir (üst alan gizliyse alt alan da gizlenir). */
 function fieldVisible(fs, valOf){
@@ -893,6 +911,8 @@ async function saveAkt(e){
   for (const f of vis) { if (!f.zorunlu) continue;
     const empty = f.tip === 'foto' ? !(pending['a-' + f.key] || []).length : !String(document.getElementById('a-' + f.key)?.value || '').trim();
     if (empty) { msg.textContent = `${f.ad} zorunlu.`; return; } }
+  { const pe = document.getElementById('a-personel'), pv = pe && !pe.closest('[data-key]')?.hidden ? pe.value.trim() : '';
+    if (pv && pListeVar() && !pListede(pv)) { pe.classList.add('p-gecersiz'); pe.focus(); msg.textContent = 'Personel listeden seçilmeli. Kişi listede yoksa önce Personel Bilgi sayfasından ekleyin.'; return; } }
   if (!S.db) { msg.textContent = 'Kayıt için giriş yapın.'; return; }
   btn.disabled = true;
   try {
@@ -1247,10 +1267,29 @@ document.addEventListener('click', async e => { const b = e.target.closest('[dat
   if (await saveFile(`SiteEye_Personel_${ymd(new Date()).replace(/-/g, '')}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType:'xlsx', type:'array' })))) toast(`${list.length} personel indirildi`); });
 
 /* Aktivite formundaki Personel alanı: personel listesinden isimle aranıp seçilir; uygun olmayan kişi için uyarı gösterilir */
-function personelDatalist(){ let dl = $('#personel-dl'); if (!dl) { dl = document.createElement('datalist'); dl.id = 'personel-dl'; document.body.appendChild(dl); }
-  const sig = S.personel.length + '|' + (S.personel[0]?.id || ''); if (dl._sig !== sig) { dl.innerHTML = S.personel.map(p => `<option value="${esc(p.adSoyad)}">${esc([p.gorev, p.lokasyon].filter(Boolean).join(' · '))}</option>`).join(''); dl._sig = sig; } }
-document.addEventListener('input', e => { if (e.target.id !== 'a-personel') return; personelUyari(e.target); });
-document.addEventListener('change', e => { if (e.target.id !== 'a-personel') return; personelUyari(e.target); });
+function personelDatalist(){ const el = $('#a-personel'); if (el && document.activeElement === el) pComboAc(el); }
+const pAra = s => String(s ?? '').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i').replace(/\s+/g, ' ').trim();
+const pListede = v => S.personel.find(x => tru(x.adSoyad) === tru(v));
+const pListeVar = () => S.personel.length > 0;
+function pComboAc(el){ const box = el.parentElement.querySelector('.pcombo-list'); if (!box) return;
+  if (!pListeVar()) { box.innerHTML = '<div class="pcombo-bos">Personel listesi boş. Personel Bilgi sayfasından personel ekleyin.</div>'; box.hidden = false; return; }
+  const q = pAra(el.value).split(' ').filter(Boolean), hits = S.personel.filter(p => { const t = pAra([p.adSoyad, p.firma, p.lokasyon, p.gorev].join(' ')); return q.every(w => t.includes(w)); });
+  const ilk = hits.slice(0, 60); box._hits = ilk; box._on = ilk.length ? 0 : -1;
+  box.innerHTML = ilk.length ? ilk.map((p, i) => { const d = pDegerlendir(p); return `<div class="pcombo-item${i === 0 ? ' on' : ''}" data-i="${i}" role="option"><span>${esc(p.adSoyad)}<small>${esc([p.firma, p.gorev, p.lokasyon].filter(Boolean).join(' · '))}</small></span>${d.uygun ? '<span class="pill ok">Uygun</span>' : '<span class="pill crit">Uygun değil</span>'}</div>`; }).join('') + (hits.length > ilk.length ? `<div class="pcombo-bos">+${hits.length - ilk.length} kişi daha — aramayı daraltın</div>` : '')
+    : '<div class="pcombo-bos">Eşleşen personel yok. Kişi listede yoksa önce Personel Bilgi sayfasından ekleyin.</div>';
+  box.hidden = false; el.setAttribute('aria-expanded', 'true'); }
+function pComboKapat(el){ const box = el.parentElement.querySelector('.pcombo-list'); if (box) box.hidden = true; el.setAttribute('aria-expanded', 'false'); }
+function pComboSec(el, p){ el.value = p.adSoyad; el.classList.remove('p-gecersiz'); pComboKapat(el); personelUyari(el); }
+document.addEventListener('focusin', e => { if (e.target.id === 'a-personel') pComboAc(e.target); });
+document.addEventListener('input', e => { if (e.target.id !== 'a-personel') return; e.target.classList.remove('p-gecersiz'); pComboAc(e.target); personelUyari(e.target); });
+document.addEventListener('keydown', e => { const el = e.target; if (el.id !== 'a-personel') return; const box = el.parentElement.querySelector('.pcombo-list'); if (!box) return;
+  const items = [...box.querySelectorAll('.pcombo-item')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (box.hidden) return pComboAc(el); if (!items.length) return; box._on = (box._on + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; items.forEach((x, i) => x.classList.toggle('on', i === box._on)); items[box._on].scrollIntoView({ block:'nearest' }); }
+  else if (e.key === 'Enter') { if (!box.hidden && box._hits && box._on >= 0) { e.preventDefault(); pComboSec(el, box._hits[box._on]); } }
+  else if (e.key === 'Escape') pComboKapat(el); });
+document.addEventListener('mousedown', e => { const it = e.target.closest('.pcombo-item'); if (!it) return; e.preventDefault(); const box = it.closest('.pcombo-list'), el = box.parentElement.querySelector('input'); pComboSec(el, box._hits[+it.dataset.i]); });
+document.addEventListener('focusout', e => { const el = e.target; if (el.id !== 'a-personel') return; pComboKapat(el);
+  const v = el.value.trim(); if (!v || !pListeVar()) return; const p = pListede(v); if (p) { el.value = p.adSoyad; personelUyari(el); } else el.classList.add('p-gecersiz'); });
 function personelUyari(el){ const w = el.closest('.fld'); if (!w) return; let h = w.querySelector('.p-uyari'); if (!h) { h = document.createElement('span'); h.className = 'hint p-uyari'; w.appendChild(h); }
   const p = S.personel.find(x => tru(x.adSoyad) === tru(el.value)); if (!p) { h.textContent = ''; return; }
   const d = pDegerlendir(p); h.innerHTML = d.uygun ? `<span style="color:var(--ok, #2e7d32)">✓ Uygun</span>${d.yakin.length ? ' · ' + esc(d.yakin[0]) : ''}` : `<span style="color:var(--crit)">⚠ Uygun değil:</span> ${esc(d.sorun.slice(0, 2).join('; '))}${d.sorun.length > 2 ? ' …' : ''}`; }
