@@ -4,15 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; connect-src 'self' https://*.googleapis.com https://firebasestorage.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; connect-src 'self' https://*.cloudfunctions.net https://*.run.app https://*.googleapis.com https://firebasestorage.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self'">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 26'%3E%3Cpath d='M1 13 L11 3 H23 L33 13 L23 23 H11 Z' fill='%23961937'/%3E%3Ccircle cx='17' cy='13' r='5.2' fill='%23fffae4'/%3E%3C/svg%3E">
 <script src="config.js"></script>
 <script type="module">
 /* Firebase bağlantı katmanı: uygulamanın geri kalanı yalnızca window.FB üzerinden konuşur */
 import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import { getAuth, setPersistence, browserSessionPersistence, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, getMultiFactorResolver, TotpMultiFactorGenerator, multiFactor, sendEmailVerification, reload, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, getMultiFactorResolver, TotpMultiFactorGenerator, multiFactor, sendEmailVerification, reload, updatePassword, reauthenticateWithCredential, EmailAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import { getFirestore, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
-import { getStorage, ref, uploadBytes, getDownloadURL, getBlob } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
+import { getStorage, ref, uploadBytes, getDownloadURL, getBlob, deleteObject } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js';
 
 const C = window.SITEEYE_CONFIG || {};
 const cfg = C.firebase || {};
@@ -39,7 +40,7 @@ if (!cfg.apiKey || !cfg.projectId) {
 } else {
   const app = initializeApp(cfg);
   const auth = getAuth(app); auth.languageCode = 'tr';
-  await setPersistence(auth, browserSessionPersistence).catch(() => {});
+  await setPersistence(auth, browserLocalPersistence).catch(() => {});
   const fs = getFirestore(app);
   const st = getStorage(app);
 
@@ -68,11 +69,12 @@ if (!cfg.apiKey || !cfg.projectId) {
   const files = {
     async upload(blob, opt = {}){ const id = /^[0-9a-f]{32}$/.test(opt.id || '') ? opt.id : rndId(); await W(uploadBytes(ref(st, 'dosya/' + id), blob, { contentType: opt.type || blob.type || 'application/octet-stream', cacheControl:'private, max-age=86400' })); return { id }; },
     url(id){ if (!urlCache.has(id)) urlCache.set(id, getDownloadURL(ref(st, 'dosya/' + id)).catch(e => { urlCache.delete(id); throw err(e); })); return urlCache.get(id); },
-    blob: id => W(getBlob(ref(st, 'dosya/' + id)))
+    blob: id => W(getBlob(ref(st, 'dosya/' + id))),
+    async remove(id){ try { await deleteObject(ref(st, 'dosya/' + id)); } catch (e) { if (e?.code !== 'storage/object-not-found') throw err(e); } urlCache.delete(id); }
   };
 
   /* Kimlik doğrulama: e-posta + şifre, ardından TOTP (authenticator) ikinci adım */
-  const info = u => ({ uid:u.uid, email:String(u.email || '').toLowerCase(), verified:!!u.emailVerified, factors:multiFactor(u).enrolledFactors.length });
+  const info = u => ({ uid:u.uid, email:String(u.email || '').toLowerCase(), verified:!!u.emailVerified, factors:multiFactor(u).enrolledFactors.length, giris:Date.parse(u.metadata?.lastSignInTime || '') || Date.now() });
   let resolver = null, pendingTotp = null;
   const totpAssert = (r, code) => { const h = r.hints.find(x => x.factorId === TotpMultiFactorGenerator.FACTOR_ID) || r.hints[0]; return r.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(h.uid, String(code || '').replace(/\D/g, ''))); };
   const A = {
@@ -95,7 +97,12 @@ if (!cfg.apiKey || !cfg.projectId) {
     async adminCreate(email, pw){ const a2 = initializeApp(cfg, 'yeni-' + Date.now()); try { const a2auth = getAuth(a2); a2auth.languageCode = 'tr'; await setPersistence(a2auth, inMemoryPersistence); const cr = await createUserWithEmailAndPassword(a2auth, email, pw); try { await sendEmailVerification(cr.user); } catch {} await signOut(a2auth); return cr.user.uid; } catch (e) { throw err(e); } finally { deleteApp(a2).catch(() => {}); } },
     resetMail: email => W(sendPasswordResetEmail(auth, email))
   };
-  window.FB = { configured:true, db, files, auth:A, adminEmail:String(C.ilkYonetici || '').trim().toLowerCase() };
+  /* Sunucu fonksiyonları (functions/index.js): tek kullanımlık authenticator kodu */
+  const fns = getFunctions(app, 'europe-west1');
+  const call = name => async data => { try { return (await httpsCallable(fns, name)(data)).data; } catch (e) { const c = String(e?.code || '');
+    const x = new Error(/not-found|internal|unavailable/.test(c) && !/Kullanıcı bulunamadı/.test(e?.message || '') ? 'Sunucu fonksiyonuna ulaşılamadı. Fonksiyonların kurulu olduğundan emin olun (KURULUM.md, adım 8).' : (e?.message || 'Hata')); x.code = c; throw x; } };
+  const fn = { authKoduUret: call('authKoduUret'), authKoduKullan: call('authKoduKullan') };
+  window.FB = { configured:true, db, files, auth:A, fn, adminEmail:String(C.ilkYonetici || '').trim().toLowerCase() };
 }
 window.dispatchEvent(new Event('fb-ready'));
 </script>
@@ -375,13 +382,12 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
       <header><h2>Aktivite girişi</h2><span class="muted" style="font-size:.85rem">Denetim, onay, eğitim, toplantı, raporlama</span></header>
       <form class="f" id="f-akt" novalidate></form>
     </div>
-    <div class="panel"><header><h3 id="a-list-title">Bu hafta girdiklerim</h3></header><div id="a-list"></div></div>
   </section>
 
   <!-- DÖF -->
   <section class="view" id="v-dof" hidden>
     <div class="bar">
-      <h2 class="grow">DÖF / uygunsuzluk takibi</h2>
+      <h2 class="grow">DÖF/CPA</h2>
       <button class="btn primary" id="dof-new">+ Yeni DÖF</button><button class="btn" data-toplu="dof">Excel ile toplu giriş</button>
     </div>
     <div class="bar">
@@ -411,7 +417,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
   <!-- FOTOĞRAFLAR -->
   <section class="view" id="v-foto" hidden>
     <div class="bar"><h2 class="grow">Fotoğraf arşivi</h2><button class="btn" id="ph-zip">Tümünü ZIP indir</button></div>
-    <div class="panel range"><div class="bar dates"><label for="ph-from" class="muted">Başlangıç</label><input type="date" id="ph-from" class="btn sm"><label for="ph-to" class="muted">Bitiş</label><input type="date" id="ph-to" class="btn sm"><input id="ph-q" class="btn sm grow" placeholder="Klasör ara: tarih, kişi, lokasyon, alt yüklenici" style="font-weight:400;min-width:200px"></div></div>
+    <div class="panel range"><div class="bar dates"><label for="ph-from" class="muted">Başlangıç</label><input type="date" id="ph-from" class="btn sm"><label for="ph-to" class="muted">Bitiş</label><input type="date" id="ph-to" class="btn sm" title="Tek gün için boş bırakın; başlangıç seçilince bitiş aynı güne ayarlanır"><input id="ph-q" class="btn sm grow" placeholder="Klasör ara: tarih, kişi, lokasyon, alt yüklenici" style="font-weight:400;min-width:200px"></div></div>
     <div class="crumbs" id="ph-path"></div>
     <div id="ph-body"></div>
   </section>
@@ -455,19 +461,23 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
       <p class="muted" style="margin:0 0 12px;font-size:.9rem">Tarih alanı sabit ve her zaman ilk sırada. Diğer alanların adını, türünü, seçeneklerini, sırasını, zorunluluğunu ve hangi aktivitelerde görüneceğini buradan belirleyin. Aktivite sekmesindeki form bu tanıma göre oluşur.</p>
       <div class="tablewrap"><table id="fa-table"></table></div>
     </div>
-    <div class="panel">
-      <header><h2>DÖF firmaları</h2><span class="muted" style="font-size:.85rem">DÖF formundaki "İletilen firma" seçenekleri · her satıra bir firma</span></header>
-      <form class="f one" id="f-ayar" novalidate>
-        <div class="fld"><label for="s-firma">Firmalar</label><textarea id="s-firma" rows="6"></textarea></div>
-        <div class="actions"><button class="btn primary" type="submit">Kaydet</button><span class="muted" id="s-msg"></span></div>
-      </form>
-    </div>
-    <div class="panel">
+        <div class="panel">
       <header><h2>Excel'den içe aktar</h2></header>
       <p class="muted" style="margin:0 0 12px;font-size:.9rem">Haftalık FAALİYET_RAPORU .xlsm dosyasını seçin; dosya adındaki hafta (ör. "39.HAFTA") otomatik seçilir, isterseniz başka hafta veya tüm yıl seçebilirsiniz. AKTİVİTELER sayfasındaki kayıtlar tüm alanlarıyla gelir, yalnızca <b>raporlayan boş</b> gelir: Rapor → Aktivite kayıtları tablosunda "Ata…" ile kullanıcılardan seçilir (filtrede "Atanmamış" ile bulunur). DÖF TÜM ZAMANLAR sayfasından aynı haftanın DÖF'leri de aktarılır. Aynı dosyayı tekrar yüklemek kopya oluşturmaz; fotoğraf eklenmiş veya raporlayanı atanmış kayıtların üzerine yazılmaz.</p>
       <div class="bar"><input type="file" id="imp-file" accept=".xlsx,.xlsm"><select class="btn sm" id="imp-hafta" aria-label="Aktarılacak hafta" hidden></select><button class="btn primary" id="imp-go" disabled>İçe aktar</button><button class="btn" id="imp-esle" type="button">Raporlayanları eşleştir</button></div>
       <p class="muted" id="imp-msg" style="font-size:.88rem"></p>
       <div class="progress" id="imp-prog" hidden><div></div></div>
+    </div>
+    <div class="panel">
+      <header><h2>E-posta gönderimi</h2></header>
+      <p class="muted" style="margin:0 0 10px;font-size:.9rem">Kullanıcı eklenince giden doğrulama e-postası ve "Şifremi unuttum" / "Şifre yenileme e-postası" bağlantıları Firebase üzerinden gönderilir. Gönderen adresi (ör. isg@mikrolink.com.tr) güvenlik gereği uygulamanın içinden değil, Firebase konsolundan bir kez tanımlanır:</p>
+      <ol class="steps" style="margin:0 0 12px"><li>Firebase konsolu → <b>Authentication → Templates</b> → <b>SMTP settings</b> → <i>Enable</i>.</li><li>Gönderen adresi, SMTP sunucusu (Microsoft 365 için smtp.office365.com, port 587; Gmail için smtp.gmail.com, port 465), kullanıcı adı ve şifreyi girip kaydedin.</li><li>Aynı sayfada şablonların dilini Türkçe, gönderen adını "SiteEye" yapın.</li></ol>
+      <div class="bar"><button class="btn sm" id="mail-test" type="button">Kendime deneme e-postası gönder</button><span class="muted" id="mail-msg"></span></div>
+    </div>
+    <div class="panel">
+      <header><h2>Oturum süresi</h2></header>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">Kullanıcılar girişten bu süre sonra uygulamadan otomatik çıkarılır ve yeniden şifre + authenticator koduyla girer. Tarayıcı kapatılsa bile süre dolana kadar oturum açık kalır; ortak kullanılan cihazlarda kısa süre seçin.</p>
+      <div class="bar"><select class="btn sm" id="ot-sure" aria-label="Oturum süresi"></select><button class="btn primary sm" id="ot-kaydet" type="button">Kaydet</button><span class="muted" id="ot-msg"></span></div>
     </div>
     <div class="panel">
       <header><h2>Yedek</h2></header>
@@ -700,13 +710,26 @@ function clearPending(id, root){ pending[id] = []; const dz = (root||document).q
 
 /* ---------- lightbox ---------- */
 document.addEventListener('click', e => { const z = e.target.closest('[data-zoom]'); if (z) { e.preventDefault(); lightbox(z.dataset.zoom, z.dataset.cap || '', z.dataset.fname || ('foto_' + z.dataset.zoom.slice(0,8) + '.jpg')); } });
+/* Yalnızca admin: fotoğrafı bağlı olduğu tüm kayıtlardan çıkarır ve dosyayı depodan siler */
+async function fotoSil(id){
+  if (!S.isAdmin || !bid(id)) throw new Error('Yetkiniz yok');
+  const kaynaklar = [['aktiviteler', acts(), ['foto']], ['dof', S.dofs, ['foto','kanitFoto']], ['kazalar', S.kazalar, ['foto']], ['cezalar', (S._czRaw || []).map(clean).filter(Boolean), ['belge']]];
+  let n = 0;
+  for (const [col, list, keys] of kaynaklar) for (const r of list) { const patch = {}; keys.forEach(k => { if ((r[k] || []).includes(id)) patch[k] = r[k].filter(x => x !== id); });
+    if (Object.keys(patch).length) { await S.db.doc(col + '/' + r.id).update({ ...patch, guncelleyen:S.meId, guncelleme:new Date().toISOString() }); n++; } }
+  await S.files.remove(id); URLC.delete(id);
+  return n;
+}
 function lightbox(id, cap, fname){
   const L = document.createElement('div'); L.className = 'lightbox';
   if (!bid(id)) return;
-  L.innerHTML = `<div class="cap"></div><div class="bar"><button class="btn sm" data-dl>İndir</button><button class="btn sm" data-x>Kapat</button></div>`;
+  L.innerHTML = `<div class="cap"></div><div class="bar"><button class="btn sm" data-dl>İndir</button>${S.isAdmin ? '<button class="btn sm danger" data-fsil>Fotoğrafı sil</button>' : ''}<button class="btn sm" data-x>Kapat</button></div>`;
   const im = document.createElement('img'); im.src = blobUrl(id); im.alt = ''; L.prepend(im); L.querySelector('.cap').textContent = cap;
   L.addEventListener('click', async e => {
     if (e.target === L || e.target.closest('[data-x]')) L.remove();
+    const fs = e.target.closest('[data-fsil]');
+    if (fs && S.isAdmin) { if (!fs.dataset.sure) { fs.dataset.sure = 1; fs.textContent = 'Emin misiniz? Kalıcı silinir'; setTimeout(() => { delete fs.dataset.sure; fs.textContent = 'Fotoğrafı sil'; }, 4000); return; }
+      fs.disabled = true; try { const n = await fotoSil(id); L.remove(); $('#layer').innerHTML = ''; toast(n ? 'Fotoğraf silindi' : 'Fotoğraf dosyası silindi'); } catch (err) { fs.disabled = false; toast('Silinemedi: ' + err.message); } return; }
     if (e.target.closest('[data-dl]')) { try { const b = await fileBlob(id); await saveFile(fname, b); } catch { toast('Fotoğraf indirilemedi'); } }
   });
   document.body.appendChild(L);
@@ -750,12 +773,11 @@ function rAkt(){
     const r = $('#a-raporlayan'); if (r && !r.value) { const v = [nameCase(AUTH.me?.ad), ls.get('isg.me')].find(x => x && [...r.options].some(o => o.value === x)); if (v) r.value = v; }
     bindDrop(f); f._sig = sig;
   }
-  if (!f._init) { f._init = true; f.addEventListener('submit', saveAkt); f.addEventListener('change', e => { if (e.target.tagName === 'SELECT') aktFormVis(); if (e.target.id === 'a-raporlayan') { ls.set('isg.me', e.target.value); rAktList(); } }); }
+  if (!f._init) { f._init = true; f.addEventListener('submit', saveAkt); f.addEventListener('change', e => { if (e.target.tagName === 'SELECT') aktFormVis(); if (e.target.id === 'a-raporlayan') ls.set('isg.me', e.target.value); }); }
   aktFormVis();
   $('#a-save').disabled = !S.db || !S.canWrite;
-  rAktList();
 }
-function rAktList(){
+function rAktList(){ if (!$('#a-list')) return;
   const me = $('#a-raporlayan').value;
   const mine = actsWeek(S.yil, cw.w).filter(a => !me || a.raporlayan === me).sort((a,b) => (b.tarih+(b.olusturma||'')).localeCompare(a.tarih+(a.olusturma||'')));
   $('#a-list-title').textContent = me ? `${me} · ${cw.w}. hafta (${mine.length})` : `${cw.w}. hafta tüm girişler (${mine.length})`;
@@ -807,7 +829,7 @@ document.addEventListener('click', e => { const n = e.target.closest('[data-czye
 function openCeza(id, tip){
   const c = id ? S.cezalar.find(x => x.id === id) : null; if (id && !c) return;
   const v = c || { tarih:ymd(today), tip:tip || 'Ceza', proje:'MTX', cezayiKesen:'Vodafone', cezaKesilen:'Mikrolink', belge:[] };
-  const canDel = c && (S.isAdmin || c.olusturan === S.meId);
+  const canDel = c && S.isAdmin;
   const kesilenOpts = uniq(['Mikrolink', ...S.cfg.altyukleniciler, v.cezaKesilen]);
   const yansOpts = uniq([...S.cfg.altyukleniciler, ...S.cfg.firmalar.filter(x => x !== 'Vodafone'), v.yansitma]);
   const maddeler = uniq(S.cezalar.map(x => x.madde).filter(Boolean));
@@ -891,7 +913,7 @@ function sheet(html){ const o = document.createElement('div'); o.className = 'ov
 function openDof(id){
   const d = id ? S.dofs.find(x => x.id === id) : null; if (id && !d) return;
   const v = d || { tarih:ymd(today), bildiren:ls.get('isg.me')||'', durum:'Devam Ediyor', bildirimTuru:'Güvensiz Durum/Davranış', firma:'Vodafone' };
-  const canDel = d && (S.isAdmin || d.olusturan === S.meId || (d.olusturanEmail && d.olusturanEmail === AUTH.me?.email));
+  const canDel = d && S.isAdmin;
   const o = sheet(`<header><h2>${d ? 'DÖF ' + esc(d.formNo||'') : 'Yeni DÖF'}</h2><button class="btn sm" data-close>Kapat</button></header>
   <form class="f" id="f-dof" novalidate>
     <div class="fld"><label for="d-tarih">Tarih <span class="req">*</span></label><input type="date" id="d-tarih" value="${esc(v.tarih)}"></div>
@@ -969,7 +991,7 @@ document.addEventListener('click', e => { const r = e.target.closest('[data-kaza
 function openKaza(id, tip){
   const k = id ? S.kazalar.find(x => x.id === id) : null; if (id && !k) return;
   const v = k || { tarih:ymd(today), proje:'MTX', olayTipi:tip || 'Kaza', sinif:'Minör', sonuc:'Hafif Yaralanma', uzuv:'N/A', kayipGun:0, aksiyonDurumu:'DEVAM EDİYOR', isveren:'MİKROLİNK' };
-  const canDel = k && (S.isAdmin || k.olusturan === S.meId || (k.olusturanEmail && k.olusturanEmail === AUTH.me?.email));
+  const canDel = k && S.isAdmin;
   const o = sheet(`<header><h2>${k ? (isRK(k) ? 'Ramak kala kaydı' : 'Kaza kaydı') : (v.olayTipi === 'Ramak Kala' ? 'Ramak kala bildir' : 'Kaza bildir')}</h2><button class="btn sm" data-close>Kapat</button></header>
   <form class="f" id="f-kaza" novalidate>
     <div class="fld full"><label>Olay tipi <span class="req">*</span></label><div class="seg" role="radiogroup" id="k-tip">${['Kaza','Ramak Kala'].map(t => `<button type="button" role="radio" data-ktip="${t}" aria-selected="${v.olayTipi === t}">${t === 'Kaza' ? 'Kaza' : 'Ramak kala'}</button>`).join('')}</div><span class="hint" id="k-tip-hint"></span></div>
@@ -1007,7 +1029,7 @@ function openKaza(id, tip){
     try {
       const foto = [...(v.foto||[]), ...await uploadAll('k-foto', msg)];
       const t = g('#k-tarih');
-      const rec = { tarih:t, yil:parseD(t).getFullYear(), saat:g('#k-saat'), bolge:g('#k-bolge'), lokasyon:g('#k-lok'), altYuklenici:g('#k-alt'), proje:g('#k-proje').trim(), olayTipi:ktip, sinif: ktip === 'Kaza' ? g('#k-sinif') : '', tur:g('#k-tur'), sonuc: ktip === 'Kaza' ? g('#k-sonuc') : 'NA', uzuv: ktip === 'Kaza' ? g('#k-uzuv') : 'N/A', yaralanmaTuru: ktip === 'Kaza' ? g('#k-yar').trim() : '', kayipGun: ktip === 'Kaza' ? (Number(g('#k-kayip'))||0) : 0, supervizor:tru(g('#k-sup')), isveren:tru(g('#k-isv')), aciklama:g('#k-acik').trim(), kokNeden:g('#k-kok').trim(), aksiyonDurumu:g('#k-aks'), foto, guncelleyen:S.meId, guncelleme:new Date().toISOString() };
+      const rec = { tarih:t, yil:parseD(t).getFullYear(), saat:g('#k-saat'), bolge:g('#k-bolge'), lokasyon:g('#k-lok'), altYuklenici:g('#k-alt'), proje:g('#k-proje').trim(), olayTipi:ktip, sinif: ktip === 'Kaza' ? g('#k-sinif') : '', tur:g('#k-tur'), sonuc: ktip === 'Kaza' ? g('#k-sonuc') : 'NA', uzuv: ktip === 'Kaza' ? g('#k-uzuv') : 'N/A', yaralanmaTuru: ktip === 'Kaza' ? g('#k-yar').trim() : '', kayipGun: ktip === 'Kaza' ? (Number(g('#k-kayip'))||0) : 0, supervizor:nameCase(g('#k-sup')), isveren:tru(g('#k-isv')), aciklama:g('#k-acik').trim(), kokNeden:g('#k-kok').trim(), aksiyonDurumu:g('#k-aks'), foto, guncelleyen:S.meId, guncelleme:new Date().toISOString() };
       msg.textContent = 'Kaydediliyor…';
       if (k) await S.db.doc('kazalar/' + k.id).update(rec); else await S.db.collection('kazalar').doc().set({ ...rec, olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:rec.guncelleme, kaynak:'uygulama' });
       o.remove(); toast(ktip === 'Kaza' ? 'Kaza kaydedildi' : 'Ramak kala kaydedildi');
@@ -1035,7 +1057,7 @@ const TOPLU = {
       ['Yaralanan uzuv', 'uzuv', TP_LIST(KZ.uzuv, true)],
       ['Yaralanma türü', 'yaralanmaTuru', { t:'metin' }],
       ['Kayıp gün', 'kayipGun', { t:'sayi' }],
-      ['Sorumlu süpervizör', 'supervizor', { t:'buyuk' }],
+      ['Sorumlu süpervizör', 'supervizor', { t:'kisi' }],
       ['İşveren', 'isveren', { t:'buyuk' }],
       ['Alt yüklenici', 'altYuklenici', TP_LIST(S.cfg.altyukleniciler)],
       ['Olay açıklaması', 'aciklama', { t:'metin' }, 1],
@@ -1114,7 +1136,7 @@ function tpCell(spec, v){
   switch (spec.t) {
     case 'tarih': { const d = tpDate(v); return d && parseD(d) ? [d] : ['', 'tarih anlaşılamadı (gg.aa.yyyy yazın)']; }
     case 'lok': return [normLok(s)];
-    case 'kisi': return [s];
+    case 'kisi': return [nameCase(s)];
     case 'buyuk': return [tru(s)];
     case 'sayi': { if (!s) return [0]; const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) && n >= 0 ? [Math.round(n)] : [0, 'sayı olmalı']; }
     case 'para': { const n = typeof v === 'number' ? v : Number(s.replace(/[₺\s]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? [Math.round(n * 100) / 100] : [null, 'tutar sayı olmalı']; }
@@ -1230,7 +1252,7 @@ function rKayit(){
   const cell = (f, a) => { const v = a[f.key]; if (f.key === 'raporlayan' && !v && S.isAdmin) return `<td><select class="btn sm" data-rapata="${esc(a.id)}" aria-label="Raporlayan ata" title="${esc(a.kaynakRaporlayan ? 'Excel\'deki ad: ' + a.kaynakRaporlayan : '')}">${opts(RAP, '', 'Ata…')}</select></td>`; if (f.key === 'sonuc') return `<td>${sonucPill(v)}</td>`; if (f.tip === 'sayi') return `<td class="n">${esc(v ?? '')}</td>`; if (f.tip === 'uzun') return `<td><div class="clamp">${esc(v || '')}</div></td>`; return `<td>${esc(v || '')}</td>`; };
   const n = cols.length + 4, shown = list.slice(0, 500);
   $('#k-table').innerHTML = `<thead><tr><th>Tarih</th><th class="n">Hafta</th>${cols.map(f => `<th${f.tip === 'sayi' ? ' class="n"' : ''}>${esc(f.ad)}</th>`).join('')}<th class="n">Foto</th><th></th></tr></thead><tbody>` +
-    (shown.length ? shown.map(a => `<tr><td class="mono">${trD(a.tarih)}</td><td class="n">${esc(a.hafta ?? '')}</td>${cols.map(f => cell(f, a)).join('')}<td class="n">${photoCell(a.foto, a)}</td><td>${(S.isAdmin || (a.olusturan && a.olusturan === S.meId) || (a.olusturanEmail && a.olusturanEmail === AUTH.me?.email)) ? `<button class="btn sm danger" data-delakt="${esc(a.id)}">Sil</button>` : ''}</td></tr>`).join('')
+    (shown.length ? shown.map(a => `<tr><td class="mono">${trD(a.tarih)}</td><td class="n">${esc(a.hafta ?? '')}</td>${cols.map(f => cell(f, a)).join('')}<td class="n">${photoCell(a.foto, a)}</td><td>${S.isAdmin ? `<button class="btn sm danger" data-delakt="${esc(a.id)}">Sil</button>` : ''}</td></tr>`).join('')
     : `<tr><td colspan="${n}"><div class="empty" style="border:0">${all.length ? 'Filtreye uyan kayıt yok.' : 'Henüz kayıt yok. “Aktivite” sekmesinden ilk kaydı ekleyin ya da Ayarlar’dan Excel’i içe aktarın.'}</div></td></tr>`) +
     (list.length > 500 ? `<tr><td colspan="${n}" class="muted">İlk 500 kayıt gösteriliyor; tamamı için "Excel ve özetler" bölümünden raporu indirin.</td></tr>` : '') + '</tbody>';
 }
@@ -1239,11 +1261,11 @@ $('#k-filters').addEventListener('change', render);
 document.addEventListener('change', async e => { const s = e.target.closest('[data-rapata]'); if (!s || !S.isAdmin || !s.value || !RAP.includes(s.value)) return;
   s.disabled = true; try { await S.db.doc('aktiviteler/' + s.dataset.rapata).update({ raporlayan:s.value, raporlayanAtandi:true, raporlayanAtayan:AUTH.me?.email || '' }); toast(`Raporlayan atandı: ${s.value}`); } catch (err) { s.disabled = false; s.value = ''; toast('Atanamadı: ' + err.message); } });
 $('#k-q').addEventListener('input', render);
-document.addEventListener('click', async e => { const b = e.target.closest('[data-delakt]'); if (!b) return; if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc('aktiviteler/' + b.dataset.delakt).delete(); toast('Kayıt silindi'); } catch (err) { toast('Silinemedi: ' + (err.code||'')); } });
+document.addEventListener('click', async e => { const b = e.target.closest('[data-delakt]'); if (!b || !S.isAdmin) return; if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc('aktiviteler/' + b.dataset.delakt).delete(); toast('Kayıt silindi'); } catch (err) { toast('Silinemedi: ' + (err.code||'')); } });
 
 /* ---------- FOTOĞRAFLAR ---------- */
 /* Fotoğraf klasörleri: her klasör = denetim tarihi · yapan kişi · lokasyon · alt yüklenici */
-S.phRange = S.phRange || presetRange('buhafta');
+S.phRange = S.phRange || { from:ymd(new Date()), to:ymd(new Date()) };
 const hesapAd = email => Object.values(AUTH.users).find(h => h.email === email)?.ad || '';
 const safeName = t => String(t).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
 function photoFolders(){
@@ -1271,7 +1293,7 @@ function rFoto(){
   $('#ph-zip').textContent = open ? 'Klasörü ZIP indir' : 'Tümünü ZIP indir';
   $('#ph-path').innerHTML = open
     ? `<button class="btn sm" data-phback>‹ Klasörler</button><span class="muted">/</span><b>${esc(open.name)}</b><span class="muted">· ${open.items.length} fotoğraf</span>`
-    : `<b>Klasörler</b><span class="muted">· ${trD(S.phRange.from)} – ${trD(S.phRange.to)} · ${folders.length} klasör · ${total} fotoğraf</span>`;
+    : `<b>Klasörler</b><span class="muted">· ${S.phRange.from === S.phRange.to ? trD(S.phRange.from) : trD(S.phRange.from) + ' – ' + trD(S.phRange.to)} · ${folders.length} klasör · ${total} fotoğraf</span>`;
   if (open) {
     $('#ph-body').innerHTML = `<div class="panel"><div class="gallery">${open.items.map((x,i) => `<figure><img loading="lazy" src="${blobUrl(x.id)}" alt="${esc(x.tur)}" data-zoom="${esc(x.id)}" data-cap="${esc(open.name + ' · ' + x.cap)}" data-fname="${esc(photoFile(open, x, i))}"><figcaption>${esc(x.tur)}</figcaption></figure>`).join('')}</div></div>`;
     return;
@@ -1281,9 +1303,11 @@ function rFoto(){
       <span class="fname"><b>${esc(trD(f.tarih))}</b><span>${esc(f.kisi)}</span><span class="muted">${esc(f.lok)} · ${esc(f.alt)}</span></span>
       <span class="fthumbs">${f.items.slice(0,3).map(x => `<img loading="lazy" src="${blobUrl(x.id)}" alt="">`).join('')}</span>
       <span class="ftags muted">${esc([...f.turler].join(', '))}</span></button>`).join('')}</div>`
-    : `<div class="empty">Bu aralıkta fotoğraflı kayıt yok. Aktivite, DÖF veya kaza kaydına eklenen fotoğraflar burada "tarih · kişi · lokasyon · alt yüklenici" klasörlerinde toplanır.</div>`;
+    : `<div class="empty">Bu tarihlerde fotoğraflı kayıt yok. Aktivite, DÖF veya kaza kaydına eklenen fotoğraflar burada "tarih · kişi · lokasyon · alt yüklenici" klasörlerinde toplanır.</div>`;
 }
-['#ph-from','#ph-to'].forEach(sel => $(sel).addEventListener('change', () => { let f = $('#ph-from').value, t = $('#ph-to').value; if (!f || !t) return; if (f > t) [f, t] = [t, f]; S.phRange = { from:f, to:t }; S.phOpen = null; render(); }));
+/* Başlangıç seçilince bitiş aynı güne ayarlanır (tek gün); aralık isteyen bitişi ayrıca seçer */
+$('#ph-from').addEventListener('change', () => { const d = $('#ph-from').value; if (!d) return; S.phRange = { from:d, to:d }; S.phOpen = null; render(); });
+$('#ph-to').addEventListener('change', () => { let f = S.phRange.from, t = $('#ph-to').value || f; if (t < f) [f, t] = [t, f]; S.phRange = { from:f, to:t }; S.phOpen = null; render(); });
 $('#ph-q').addEventListener('input', render);
 document.addEventListener('click', e => { const o = e.target.closest('[data-phopen]'); if (o) { S.phOpen = o.dataset.phopen; render(); window.scrollTo(0, 0); } if (e.target.closest('[data-phback]')) { S.phOpen = null; render(); } });
 $('#ph-zip').addEventListener('click', async () => {
@@ -1291,7 +1315,7 @@ $('#ph-zip').addEventListener('click', async () => {
   if (!window.JSZip) { toast('ZIP kütüphanesi yüklenemedi'); return; }
   const n = folders.reduce((s,f) => s + f.items.length, 0); btn.disabled = true; const zip = new JSZip(); let ok = 0, k = 0;
   for (const f of folders) { const dir = zip.folder(safeName(f.name.replace(/ · /g, ' - '))); for (const [i, x] of f.items.entries()) { btn.textContent = `Hazırlanıyor ${++k}/${n}`; try { const b = await fileBlob(x.id); dir.file(photoFile(f, x, i), b); ok++; } catch {} } }
-  const name = folders.length === 1 ? safeName(folders[0].name.replace(/ · /g, ' - ')) : `SiteEye_FOTO_${S.phRange.from.replace(/-/g,'')}-${S.phRange.to.replace(/-/g,'')}`;
+  const name = folders.length === 1 ? safeName(folders[0].name.replace(/ · /g, ' - ')) : `SiteEye_FOTO_${S.phRange.from.replace(/-/g,'')}${S.phRange.to !== S.phRange.from ? '-' + S.phRange.to.replace(/-/g,'') : ''}`;
   if (ok) { const data = await zip.generateAsync({ type:'uint8array' }); await saveFile(`${name}.zip`, data); } else toast('Fotoğraflar alınamadı');
   btn.disabled = false; render();
 });
@@ -1479,12 +1503,12 @@ async function saveCfg(patch){
   catch { const { aktiviteler, lokasyonlar, ...rest } = S.cfg; await ref.set({ ...rest, ...patch }); }
 }
 function rAyar(){
-  const f = $('#f-ayar');
   rFields();
-  if (!f._init) { f._init = true; f.addEventListener('submit', async e => { e.preventDefault(); const firmalar = uniq($('#s-firma').value.split('\n').map(x => x.trim())); try { await saveCfg({ firmalar, guncelleme:new Date().toISOString() }); $('#s-msg').textContent = 'Kaydedildi.'; } catch (err) { $('#s-msg').textContent = 'Kaydedilemedi: ' + (err.code || ''); } }); }
-  if (document.activeElement?.closest('#f-ayar')) return;
-  $('#s-firma').value = S.cfg.firmalar.join('\n');
+  const sel = $('#ot-sure'); if (document.activeElement !== sel) sel.innerHTML = OTURUM_SECENEK.map(([h, l]) => `<option value="${h}"${h === (S.oturumSaat || 8) ? ' selected' : ''}>${l}</option>`).join('');
 }
+$('#mail-test').addEventListener('click', async () => { if (!S.isAdmin) return; const m = $('#mail-msg'); try { await FB.auth.resetMail(AUTH.me.email); m.textContent = `${AUTH.me.email} adresine şifre yenileme e-postası gönderildi. Gelen e-postanın gönderen adresini kontrol edin; şifrenizi değiştirmek zorunda değilsiniz.`; } catch (err) { m.textContent = 'Gönderilemedi: ' + err.message; } });
+$('#ot-kaydet').addEventListener('click', async () => { if (!S.isAdmin) return; const h = +$('#ot-sure').value, m = $('#ot-msg'); if (!OTURUM_SECENEK.some(x => x[0] === h)) return;
+  try { await S.db.doc('ayarlar/oturum').set({ sureSaat:h, guncelleme:new Date().toISOString(), guncelleyen:AUTH.me?.email || '' }); m.textContent = `Kaydedildi: ${oturumAd(h)}. Yeni süre tüm kullanıcılara hemen uygulanır.`; } catch (err) { m.textContent = 'Kaydedilemedi: ' + err.message; } });
 const CORE = ['aktivite','raporlayan'];
 async function saveFields(arr){ await S.db.doc('ayarlar/aktiviteFormu').set({ alanlar:arr, guncelleme:new Date().toISOString(), guncelleyen:AUTH.me?.email || '' }); }
 function rFields(){
@@ -1627,6 +1651,7 @@ function subscribe(){
   S.unsub.forEach(u => u()); S.unsub = []; S.months = {};
   const db = S.db, err = e => { if (e?.code === 'permission-denied' && AUTH.me) banner('Kayıtlara erişim izniniz yok veya oturumunuz değişti. Çıkış yapıp yeniden girin.', true); };
   S.unsub.push(db.doc('ayarlar/listeler').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.cfg = { ...DEF, ...(d || {}) }; if (!Array.isArray(S.cfg.firmalar) || !S.cfg.firmalar.length) S.cfg.firmalar = DEF.firmalar; applyFields(); render(); }, err));
+  S.unsub.push(db.doc('ayarlar/oturum').onSnapshot(snap => { const h = Number(snap.exists ? snap.data()?.sureSaat : 0); S.oturumSaat = OTURUM_SECENEK.some(x => x[0] === h) ? h : 8; if (S.tab === 'ayar') render(); }, err));
   S.unsub.push(db.doc('ayarlar/aktiviteFormu').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.fields = Array.isArray(d?.alanlar) && d.alanlar.length ? d.alanlar : null; applyFields(); render(); }, err));
   for (const yy of [S.yil - 1, S.yil]) for (let m = 1; m <= 12; m++) S.unsub.push(db.collection('aktiviteler').where('donem', '==', `${yy}-${pad(m)}`).onSnapshot(snap => { S.months[`${yy}-${m}`] = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._ac = null; rStatus(); render(); }, err));
   S.unsub.push(db.collection('dof').onSnapshot(snap => { S._dofsRaw = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._dc = null; render(); }, err));
@@ -1730,7 +1755,7 @@ function showAuth(step, ctx = {}){
       <div class="fld"><label for="au-mail">E-posta</label><input id="au-mail" type="email" autocomplete="username" value="${esc(ctx.email || ls.get('isg.mail') || '')}"></div>
       <div class="fld"><label for="au-pw">Şifre</label><input id="au-pw" type="password" autocomplete="current-password"></div>
       <div class="actions"><button class="btn primary" type="submit" id="au-go">Devam</button><button class="btn" type="button" id="au-forgot">Şifremi unuttum</button><span class="err" id="au-msg">${esc(flash || '')}</span></div>
-      <p class="muted" style="grid-column:1/-1;margin:0;font-size:.85rem">İlk kez giriyorsanız yöneticinin verdiği geçici şifreyi yazın. Authenticator tanımladıysanız bir sonraki adımda 6 haneli kod sorulur.</p></form>`, 'MTX Projesi İSG kayıt sistemi');
+      <p class="muted" style="grid-column:1/-1;margin:0;font-size:.85rem">İlk kez giriyorsanız yöneticinin verdiği geçici şifreyi yazın. Authenticator tanımladıysanız bir sonraki adımda 6 haneli kod sorulur.</p></form>`);
     $('#au-forgot').addEventListener('click', async () => { const email = $('#au-mail').value.trim().toLowerCase(), m = $('#au-msg');
       if (!okMail(email)) return m.textContent = 'Önce e-posta adresinizi yazın.';
       try { await FB.auth.resetMail(email); } catch (e) { if (e.code === 'auth/too-many-requests') return m.textContent = e.message; }
@@ -1739,7 +1764,24 @@ function showAuth(step, ctx = {}){
       const email = $('#au-mail').value.trim().toLowerCase(), pw = $('#au-pw').value;
       if (!okMail(email) || !pw) return m.textContent = 'E-posta ve şifrenizi girin.';
       busy(btn, m);
-      try { ls.set('isg.mail', email); const r = await FB.auth.signIn(email, pw); if (r.mfa) showAuth('code', { email }); }
+      try { ls.set('isg.mail', email); const r = await FB.auth.signIn(email, pw); if (r.mfa) showAuth('code', { email, pw }); }
+      catch (err) { idle(btn, m, err.message); }
+    });
+    return;
+  }
+
+  if (step === 'lost') {
+    box.innerHTML = authCard('Yönetici kodu ile giriş', `<form class="f one" id="au-f" novalidate>
+      <div class="fld"><label for="au-kod">Tek kullanımlık kod</label><input id="au-kod" class="mono" autocomplete="off" placeholder="XXXXX-XXXXX" maxlength="11" style="text-transform:uppercase"><span class="hint">Telefonunuzu kaybettiyseniz veya authenticator silindiyse yöneticinizden kod isteyin. Kod 24 saat geçerlidir ve bir kez kullanılır.</span></div>
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Devam</button><button class="btn" type="button" id="au-back">Geri</button><span class="err" id="au-msg"></span></div></form>`, esc(ctx.email || ''));
+    $('#au-kod').focus();
+    $('#au-back').addEventListener('click', () => showAuth('login', { email:ctx.email }));
+    $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), kod = $('#au-kod').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (kod.length !== 10) return m.textContent = 'Kodu XXXXX-XXXXX biçiminde girin.';
+      if (!ctx.pw) return showAuth('login', { email:ctx.email, msg:'Önce şifrenizle giriş yapın.' });
+      busy(btn, m, 'Kod doğrulanıyor…');
+      try { await FB.fn.authKoduKullan({ email:ctx.email, kod }); m.textContent = 'Kod doğrulandı, giriş yapılıyor…';
+        const r = await FB.auth.signIn(ctx.email, ctx.pw); if (r.mfa) return idle(btn, m, 'Eski authenticator kaldırılamadı. Yöneticinizle görüşün.'); toast('Şimdi yeni authenticator tanımlayın'); }
       catch (err) { idle(btn, m, err.message); }
     });
     return;
@@ -1748,8 +1790,10 @@ function showAuth(step, ctx = {}){
   if (step === 'code') {
     box.innerHTML = authCard('Authenticator kodu', `<form class="f one" id="au-f" novalidate>
       <div class="fld"><label for="au-code">6 haneli kod</label><input id="au-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="mono"><span class="hint">Telefonunuzdaki Authenticator uygulamasında "SiteEye" kaydının kodu. Bu cihazın saati: ${clockNow()}</span></div>
-      <div class="actions"><button class="btn primary" type="submit" id="au-go">Giriş yap</button><button class="btn" type="button" id="au-back">Geri</button><span class="err" id="au-msg"></span></div></form>`, esc(ctx.email || ''));
+      <div class="actions"><button class="btn primary" type="submit" id="au-go">Giriş yap</button><button class="btn" type="button" id="au-back">Geri</button><span class="err" id="au-msg"></span></div>
+      <p style="grid-column:1/-1;margin:0"><button class="btn sm" type="button" id="au-lost">Authenticator'ımı kaybettim</button></p></form>`, esc(ctx.email || ''));
     $('#au-code').focus();
+    $('#au-lost').addEventListener('click', () => showAuth('lost', ctx));
     $('#au-back').addEventListener('click', () => showAuth('login', { email:ctx.email }));
     $('#au-f').addEventListener('submit', async e => { e.preventDefault(); const m = $('#au-msg'), btn = $('#au-go'), c = $('#au-code').value.replace(/\D/g, '');
       if (c.length !== 6) return m.textContent = '6 haneli kodu girin.';
@@ -1876,12 +1920,17 @@ async function route(){
   let mfa = false; try { mfa = await FB.auth.secondFactor(); } catch {}
   if (my !== AUTH.seq) return;
   if (!mfa) { AUTH.flash = 'Lütfen şifreniz ve authenticator kodunuzla yeniden giriş yapın.'; return FB.auth.signOut(); }
+  try { const o = await S.db.doc('ayarlar/oturum').get(); const h = Number(o.exists ? o.data()?.sureSaat : 0); S.oturumSaat = OTURUM_SECENEK.some(x => x[0] === h) ? h : 8; } catch { S.oturumSaat = S.oturumSaat || 8; }
+  if (my !== AUTH.seq) return;
+  if (oturumDoldu()) { AUTH.flash = `Oturum süreniz (${oturumAd(S.oturumSaat)}) doldu. Lütfen yeniden giriş yapın.`; return FB.auth.signOut(); }
   loginOk({ uid:u.uid, ...p, ad:nameCase(p.ad), email:u.email });
 }
 
-let lastAct = Date.now();
-['pointerdown','keydown'].forEach(ev => document.addEventListener(ev, () => { lastAct = Date.now(); }, { passive:true }));
-setInterval(() => { if (AUTH.me && Date.now() - lastAct > 30 * 60000) logout('30 dakika işlem yapılmadığı için oturum kapatıldı.'); }, 60000);
+/* Oturum süresi: yönetici Ayarlar'dan seçer; girişten bu kadar süre sonra kullanıcı otomatik çıkarılır */
+const OTURUM_SECENEK = [[2,'2 saat'],[4,'4 saat'],[8,'8 saat'],[12,'12 saat'],[24,'24 saat'],[48,'48 saat'],[168,'7 gün'],[720,'30 gün']];
+const oturumAd = h => (OTURUM_SECENEK.find(x => x[0] === h) || [0, h + ' saat'])[1];
+const oturumDoldu = () => { const u = FB.auth.current(); return !!u && Date.now() - u.giris > (S.oturumSaat || 8) * 3600e3; };
+setInterval(() => { if (AUTH.me && oturumDoldu()) logout(`Oturum süreniz (${oturumAd(S.oturumSaat || 8)}) doldu. Lütfen yeniden giriş yapın.`); }, 60000);
 
 function loginOk(h, silent){
   const first = !AUTH.me || AUTH.me.uid !== h.uid;
@@ -1904,7 +1953,7 @@ function watchUsers(){
   }, () => {});
 }
 function stopApp(){
-  AUTH.me = null; S.isAdmin = false; S.meId = null; S.files = null;
+  AUTH.me = null; S.isAdmin = false; S.meId = null; S.files = null; S.phOpen = null; S.phOpen = null;
   S.unsub.forEach(u => { try { u(); } catch {} }); S.unsub = []; S.subscribed = false; S.months = {}; S._ac = null; S._dofsRaw = []; S._dc = null; S._czRaw = []; S._zc = null; S._kazRaw = []; S._kc = null;
   if (AUTH.usersUnsub) { try { AUTH.usersUnsub(); } catch {} AUTH.usersUnsub = null; } AUTH.users = {}; RAP = []; applyFields();
   $('#layer').innerHTML = '';
@@ -1939,7 +1988,7 @@ function rKullanici(){
     return `<tr><td>${esc(h.ad)}${self ? ' <span class="muted">(siz)</span>' : ''}</td><td class="mono" style="font-size:.85rem">${esc(h.email)}</td>
       <td>${self ? (h.rol === 'admin' ? 'Admin' : 'Kullanıcı') : `<select class="btn sm" data-urol="${k}" aria-label="Rol"><option value="kullanici"${h.rol==='kullanici'?' selected':''}>Kullanıcı</option><option value="admin"${h.rol==='admin'?' selected':''}>Admin</option></select>`}</td>
       <td><span class="pill ${dk}">${dt}</span></td><td class="mono" style="font-size:.85rem">${h.sonGiris ? esc(fmtTs(h.sonGiris)) : '—'}</td>
-      <td style="white-space:nowrap">${self ? '' : `<button class="btn sm" data-ureset="${k}">Şifre yenileme e-postası</button> <button class="btn sm" data-uakt="${k}">${h.aktif ? 'Pasifleştir' : 'Aktifleştir'}</button> <button class="btn sm danger" data-udel="${k}">Sil</button>`}</td></tr>`; }).join('') + '</tbody>';
+      <td style="white-space:nowrap">${self ? '' : `<button class="btn sm" data-ureset="${k}">Şifre yenileme e-postası</button> <button class="btn sm" data-uauth="${k}">Authenticator kodu</button> <button class="btn sm" data-uakt="${k}">${h.aktif ? 'Pasifleştir' : 'Aktifleştir'}</button> <button class="btn sm danger" data-udel="${k}">Sil</button>`}</td></tr>`; }).join('') + '</tbody>';
 }
 function adminErr(err){ return 'Kaydedilemedi: ' + (err?.message || 'hata'); }
 function showCred(ad, email, pw, what){
@@ -1947,6 +1996,13 @@ function showCred(ad, email, pw, what){
   $('#u-cred-cp').onclick = e => copyText(`Adres: ${location.origin + location.pathname}\nE-posta: ${email}\nGeçici şifre: ${pw}`, e.target); $('#u-cred-x').onclick = () => $('#u-cred').innerHTML = '';
 }
 const admins = () => Object.values(AUTH.users).filter(h => h.rol === 'admin' && h.aktif);
+/* Authenticator'ını kaybeden kullanıcıya tek kullanımlık giriş kodu (sunucu fonksiyonu üretir) */
+document.addEventListener('click', async e => { const b = e.target.closest('[data-uauth]'); if (!b || !S.isAdmin) return; const h = AUTH.users[b.dataset.uauth]; if (!h) return;
+  if (!b.dataset.sure) { b.dataset.sure = 1; const o = b.textContent; b.textContent = 'Kod üretilsin mi?'; setTimeout(() => { delete b.dataset.sure; b.textContent = o; }, 3500); return; }
+  b.disabled = true; try { const r = await FB.fn.authKoduUret({ uid:h.uid });
+    $('#u-cred').innerHTML = `<div class="banner"><b>${esc(h.ad)} için tek kullanımlık authenticator kodu</b> · ${esc(fmtTs(r.son))} tarihine kadar geçerli, bir kez kullanılır.<div class="cred mono" id="u-cred-t">${esc(r.kod)}</div><span class="muted" style="font-size:.85rem">Kullanıcı girişte şifresini yazar, kod ekranında "Authenticator'ımı kaybettim"i seçip bu kodu girer; ardından yeni authenticator tanımlar.</span><br><button class="btn sm" id="u-cred-cp">Kopyala</button> <button class="btn sm" id="u-cred-x">Kapat</button></div>`;
+    $('#u-cred-cp').onclick = ev => copyText(r.kod, ev.target); $('#u-cred-x').onclick = () => $('#u-cred').innerHTML = ''; window.scrollTo(0, 0); }
+  catch (err) { toast(err.message); } finally { b.disabled = false; delete b.dataset.sure; b.textContent = 'Authenticator kodu'; } });
 document.addEventListener('change', async e => { const s = e.target.closest('[data-urol]'); if (!s || !S.isAdmin) return; const h = AUTH.users[s.dataset.urol]; if (!h) return;
   if (h.rol === 'admin' && s.value !== 'admin' && admins().length <= 1) { s.value = 'admin'; return toast('En az bir admin kalmalı'); }
   try { await S.db.doc('kullanicilar/' + h.uid).update({ rol:s.value === 'admin' ? 'admin' : 'kullanici' }); toast('Rol güncellendi'); } catch (err) { s.value = h.rol; toast(adminErr(err)); } });
