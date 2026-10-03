@@ -113,7 +113,8 @@ if (!cfg.apiKey || !cfg.projectId) {
   /* Sunucu fonksiyonları (functions/index.js): tek kullanımlık authenticator kodu */
   const fns = getFunctions(app, 'europe-west1');
   const call = (name, opt) => async data => { try { return (await httpsCallable(fns, name, opt)(data)).data; } catch (e) { const c = String(e?.code || '');
-    const x = new Error(/not-found|internal|unavailable/.test(c) && !/Kullanıcı bulunamadı/.test(e?.message || '') ? 'Sunucu fonksiyonuna ulaşılamadı. Fonksiyonların kurulu olduğundan emin olun (KURULUM.md, adım 8).' : (e?.message || 'Hata')); x.code = c; throw x; } };
+    const msg = String(e?.message || ''), yok = /not-found|internal|unavailable/.test(c) && (!msg || /^(internal|not[-_ ]found|unavailable|failed to fetch)$/i.test(msg.trim()));
+    const x = new Error(yok ? 'Sunucu fonksiyonuna ulaşılamadı: fonksiyonlar henüz kurulmamış veya güncellenmemiş. KURULUM.md adım 8\'deki Cloud Shell komutlarıyla güncel paketi kurun.' : (msg || 'Hata')); x.code = c; throw x; } };
   const fn = { authKoduUret: call('authKoduUret'), authKoduKullan: call('authKoduKullan'), smtpKaydet: call('smtpKaydet', { timeout:60000 }), smtpDurum: call('smtpDurum'), raporGonderSimdi: call('raporGonderSimdi', { timeout:300000 }) };
   window.FB = { configured:true, db, files, auth:A, fn, adminEmail:String(C.ilkYonetici || '').trim().toLowerCase() };
 }
@@ -2193,7 +2194,7 @@ function mrZaman(s){ if (s.siklik === 'saatlik') return `Her saat başı (${hh(s
   return `Her ayın ${s.ayGunu || 1}. günü ${hh(s.saat ?? 9)}`; }
 async function mrSmtpYukle(){ if (!S.isAdmin || !FB.fn?.smtpDurum) return; const el = $('#mr-smtp');
   try { const d = await FB.fn.smtpDurum({}); S.smtp = d; el.innerHTML = d.var ? `Gönderen: <b>${esc(d.fromAd || 'SiteEye')} &lt;${esc(d.from)}&gt;</b> · ${esc(d.host)}:${esc(d.port)}` : '<span style="color:var(--crit)">Gönderen e-posta hesabı (SMTP) henüz ayarlanmadı.</span> Raporların gönderilebilmesi için önce bunu ayarlayın.'; }
-  catch (e) { el.textContent = 'Gönderen hesap bilgisi alınamadı: ' + e.message; } }
+  catch (e) { el.innerHTML = `<span style="color:var(--crit)">${esc(e.message)}</span>`; } }
 function rMailRapor(){ const T = $('#mr-table'); if (!T) return; if (S.smtp === undefined) { S.smtp = null; mrSmtpYukle(); }
   const L = S.mailRapor || [], D = S.mailDurum || {}, tAd = k => MR_TABLO.find(x => x[0] === k)?.[1] || k;
   T.innerHTML = `<thead><tr><th>Ad</th><th>Tablolar</th><th>Alıcılar</th><th>Zaman</th><th>Dönem</th><th>Son gönderim</th><th></th></tr></thead><tbody>` + (L.length ? L.map(s => { const d = D[s.id];
