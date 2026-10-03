@@ -890,9 +890,19 @@ function rCeza(){
   $('#cz-kpis').innerHTML = K.map(([v,l,al]) => `<div class="kpi${al ? ' alert' : ''}"><div class="v num">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join('');
   document.querySelectorAll('[data-czyeni]').forEach(b => b.disabled = !S.db || !S.canWrite);
   const list = [...S.cezalar].sort((a,b) => b.tarih.localeCompare(a.tarih));
-  $('#cz-table').innerHTML = `<thead><tr><th>Tarih</th><th>Lokasyon</th><th class="n">Tutar</th><th>Cezayı kesen</th><th>Ceza kesilen</th><th>Yansıtılan</th><th class="n">Yansıtılan tutar</th><th>Ceza maddesi</th></tr></thead><tbody>` +
-    (list.length ? list.map(c => `<tr class="click" data-cz="${esc(c.id)}"><td class="mono">${trD(c.tarih)}</td><td>${esc(c.lokasyon || '')}</td><td class="n">${esc(TL(c.tutar))}</td><td>${esc(c.cezayiKesen || '')}</td><td>${esc(c.cezaKesilen || '')}</td><td>${esc(c.yansitma || '—')}</td><td class="n">${c.yansitmaTutar ? esc(TL(c.yansitmaTutar)) : '—'}</td><td><div class="clamp">${esc(c.madde || c.aciklama || '')}</div></td></tr>`).join('')
-    : `<tr><td colspan="8"><div class="empty" style="border:0">Henüz ceza kaydı yok. “+ Ceza” ile kesilen cezayı girin.</div></td></tr>`) + '</tbody>';
+  const C = [
+    ['Tarih',0,null, c => `<td class="mono">${trD(c.tarih)}</td>`],
+    ['Lokasyon',0,'lokasyon', c => `<td>${esc(c.lokasyon || '')}</td>`],
+    ['Tutar',1,'tutar', c => `<td class="n">${esc(TL(c.tutar))}</td>`],
+    ['Cezayı kesen',0,'cezayiKesen', c => `<td>${esc(c.cezayiKesen || '')}</td>`],
+    ['Ceza kesilen',0,'cezaKesilen', c => `<td>${esc(c.cezaKesilen || '')}</td>`],
+    ['Yansıtılan',0,'yansitma', c => `<td>${esc(c.yansitma || '—')}</td>`],
+    ['Yansıtılan tutar',1,'yansitmaTutar', c => `<td class="n">${c.yansitmaTutar ? esc(TL(c.yansitmaTutar)) : '—'}</td>`],
+    ['Ceza maddesi',0,'madde', c => `<td><div class="clamp">${esc(c.madde || '')}</div></td>`]
+  ].filter(c => !c[2] || alanVar('ceza', c[2]));
+  $('#cz-table').innerHTML = `<thead><tr>${C.map(c => `<th${c[1] ? ' class="n"' : ''}>${c[0]}</th>`).join('')}</tr></thead><tbody>` +
+    (list.length ? list.map(c => `<tr class="click" data-cz="${esc(c.id)}">${C.map(x => x[3](c)).join('')}</tr>`).join('')
+    : `<tr><td colspan="${C.length}"><div class="empty" style="border:0">Henüz ceza kaydı yok. “+ Ceza” ile kesilen cezayı girin.</div></td></tr>`) + '</tbody>';
 }
 document.addEventListener('click', e => { const n = e.target.closest('[data-czyeni]'); if (n) openCeza(null, n.dataset.czyeni); const r = e.target.closest('[data-cz]'); if (r) openCeza(r.dataset.cz); });
 /* ---------- Admin tanımlı formlar: DÖF ve Ceza ----------
@@ -937,16 +947,15 @@ const KAYNAK = { kullanicilar:'Kullanıcılar', lokasyonlar:'Aktivite formundaki
 const optsOf = f => f.kaynak === 'kullanicilar' ? RAP : f.kaynak && Object.hasOwn(KAYNAK, f.kaynak) ? (S.cfg[f.kaynak] || []) : (f.secenekler || []);
 const FORMLAR = {
   aktivite:{ ad:'Aktivite formu', doc:'ayarlar/aktiviteFormu', def:() => DEFAULT_FIELDS, core:['aktivite','raporlayan'] },
-  dof:{ ad:'DÖF formu', doc:'ayarlar/dofFormu', def:() => DEFAULT_DOF, core:['bildiren','lokasyon','gozlem','durum'] },
+  dof:{ ad:'DÖF formu', doc:'ayarlar/dofFormu', def:() => DEFAULT_DOF, core:['gozlem'] },
   ceza:{ ad:'Ceza formu', doc:'ayarlar/cezaFormu', def:() => DEFAULT_CEZA, core:['tutar'] }
 };
 S.forms = S.forms || {};
 const FF = fm => { const raw = fm === 'aktivite' ? S.fields : S.forms[fm];
   const a = Array.isArray(raw) ? raw.filter(validField).map(f => ({ ...f, secenekler: Array.isArray(f.secenekler) ? f.secenekler.filter(x => typeof x === 'string') : [], kaynak: Object.hasOwn(KAYNAK, f.kaynak || '') ? f.kaynak : '', kosul: f.kosul && Array.isArray(f.kosul.degerler) && KEY_RE.test(f.kosul.alan || '') ? { alan:f.kosul.alan, degerler:f.kosul.degerler.filter(x => typeof x === 'string') } : null, rapor: KEY_RE.test(f.rapor || '') ? f.rapor : '', yer: typeof f.yer === 'string' ? f.yer : '' })) : [];
-  if (!a.length) return FORMLAR[fm].def();
-  /* Sistem alanı eksikse (eski kayıtlı form) sona eklenir; böylece raporlar bozulmaz */
-  if (fm !== 'aktivite') FORMLAR[fm].def().forEach(d => { if (!a.some(x => x.key === d.key)) a.push({ ...d, aktif:false }); });
-  return a; };
+  return a.length ? a : FORMLAR[fm].def(); };
+/* Formda (açık) olan alan mı? Silinen veya gizlenen alanın sütunu tablolarda da gösterilmez */
+const alanVar = (fm, ...keys) => FF(fm).some(f => keys.includes(f.key) && f.aktif !== false);
 
 /* Genel alan HTML'i (değer ve önek ile) */
 function genFieldHtml(f, pfx, val){
@@ -1037,13 +1046,14 @@ function openDof(id){
 }
 document.addEventListener('click', async e => { const a = e.target.closest('[data-czpdf]'); if (!a) return; e.preventDefault(); const id = bid(a.dataset.czpdf); if (!id) return; try { const b = await fileBlob(id); await saveFile(a.dataset.czpdfad || 'belge.pdf', b); } catch { toast('Belge indirilemedi'); } });
 
-function dofFiltre(){ const lk = $('#dof-lok').value, dal = $('#dof-alt').value, du = $('#dof-durum').value, q = tru($('#dof-q').value);
+function dofFiltre(){ const lk = alanVar('dof','lokasyon') ? $('#dof-lok').value : '', dal = alanVar('dof','altYuklenici') ? $('#dof-alt').value : '', du = alanVar('dof','durum') ? $('#dof-durum').value : '', q = tru($('#dof-q').value);
   return S.dofs.filter(d => (du === 'acik' ? d.durum === 'Devam Ediyor' : !du || d.durum === du) && (!lk || d.lokasyon === lk) && (!dal || d.altYuklenici === dal) && (!q || tru([d.gozlem,d.formNo,d.sorumlu,d.aksiyon].join(' ')).includes(q))); }
 function rDof(){
   const lk = $('#dof-lok').value; $('#dof-lok').innerHTML = opts(S.cfg.lokasyonlar, lk, 'Tüm lokasyonlar');
   const dal = $('#dof-alt').value; $('#dof-alt').innerHTML = opts(uniq([...S.cfg.altyukleniciler, ...S.dofs.map(d => d.altYuklenici)]), dal, 'Tüm alt yükleniciler');
   $('#dof-new').disabled = !S.db || !S.canWrite;
-  const du = $('#dof-durum').value, q = tru($('#dof-q').value);
+  $('#dof-lok').hidden = !alanVar('dof','lokasyon'); $('#dof-alt').hidden = !alanVar('dof','altYuklenici'); $('#dof-durum').hidden = !alanVar('dof','durum');
+  const du = alanVar('dof','durum') ? $('#dof-durum').value : '', q = tru($('#dof-q').value);
   let list = dofFiltre();
   const age = d => d.durum === 'Devam Ediyor' ? daysSince(d.tarih) : (d.kapanisTarih ? Math.round((parseD(d.kapanisTarih) - parseD(d.tarih)) / 864e5) : null);
   const SK = { risk:d => riskOf(d.olasilik, d.siddet).p, formNo:d => d.formNo || '', tarih:d => d.tarih || '', lokasyon:d => d.lokasyon || '', altYuklenici:d => d.altYuklenici || '', gozlem:d => d.gozlem || '', sorumlu:d => d.sorumlu || '', bekleme:d => age(d) ?? -1, durum:d => d.durum || '', foto:d => (d.foto||[]).length + (d.kanitFoto||[]).length };
@@ -1051,10 +1061,21 @@ function rDof(){
   list.sort((a,b) => { const x = SK[srt.key](a), y = SK[srt.key](b); const c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'tr'); return c * srt.dir || b.tarih.localeCompare(a.tarih); });
   const th = (key, label, n) => `<th${n ? ' class="n"' : ''} aria-sort="${srt.key === key ? (srt.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="sortbtn" data-dsort="${key}">${label}<span class="arr">${srt.key === key ? (srt.dir > 0 ? '▲' : '▼') : '↕'}</span></button></th>`;
   const pill = s => s === 'Tamamlandı' ? 'ok' : s === 'İptal' ? '' : 'warn';
-  $('#dof-table').innerHTML = `<thead><tr>${th('risk','Risk')}${th('formNo','Form no')}${th('tarih','Tarih')}${th('lokasyon','Lokasyon')}${th('altYuklenici','Alt yüklenici')}${th('gozlem','Gözlem')}${th('sorumlu','Sorumlu')}${th('bekleme','Bekleme',1)}${th('durum','Durum')}${th('foto','Foto',1)}</tr></thead><tbody>` +
-    (list.length ? list.slice(0, 400).map(d => { const r = riskOf(d.olasilik, d.siddet); const ag = age(d);
-      return `<tr class="click" data-dof="${esc(d.id)}"><td><span class="risk ${r.k}"><span class="sc">${r.p||'—'}</span></span></td><td class="mono">${esc(d.formNo||'')}</td><td class="mono">${trD(d.tarih)}</td><td>${esc(d.lokasyon||'')}</td><td>${esc(d.altYuklenici||'')}</td><td><div class="clamp">${esc(d.gozlem)}</div></td><td><div class="clamp">${esc(d.sorumlu||'')}</div></td><td class="n">${ag==null?'—':ag+' g'}</td><td><span class="pill ${pill(d.durum)}">${esc(d.durum||'')}</span></td><td class="n">${(d.foto||[]).length + (d.kanitFoto||[]).length}</td></tr>`; }).join('')
-    : `<tr><td colspan="10"><div class="empty" style="border:0">${S.dofs.length ? 'Filtreye uyan DÖF yok.' : 'Henüz DÖF yok. “+ Yeni DÖF” ile ilk uygunsuzluğu kaydedin.'}</div></td></tr>`) + '</tbody>';
+  const C = [
+    ['risk','Risk',0,['olasilik','siddet'], d => { const r = riskOf(d.olasilik, d.siddet); return `<td><span class="risk ${r.k}"><span class="sc">${r.p||'—'}</span></span></td>`; }],
+    ['formNo','Form no',0,['formNo'], d => `<td class="mono">${esc(d.formNo||'')}</td>`],
+    ['tarih','Tarih',0,null, d => `<td class="mono">${trD(d.tarih)}</td>`],
+    ['lokasyon','Lokasyon',0,['lokasyon'], d => `<td>${esc(d.lokasyon||'')}</td>`],
+    ['altYuklenici','Alt yüklenici',0,['altYuklenici'], d => `<td>${esc(d.altYuklenici||'')}</td>`],
+    ['gozlem','Gözlem',0,['gozlem'], d => `<td><div class="clamp">${esc(d.gozlem||'')}</div></td>`],
+    ['sorumlu','Sorumlu',0,['sorumlu'], d => `<td><div class="clamp">${esc(d.sorumlu||'')}</div></td>`],
+    ['bekleme','Bekleme',1,null, d => { const ag = age(d); return `<td class="n">${ag==null?'—':ag+' g'}</td>`; }],
+    ['durum','Durum',0,['durum'], d => `<td><span class="pill ${pill(d.durum)}">${esc(d.durum||'')}</span></td>`],
+    ['foto','Foto',1,['foto','kanitFoto'], d => `<td class="n">${(d.foto||[]).length + (d.kanitFoto||[]).length}</td>`]
+  ].filter(c => !c[3] || alanVar('dof', ...c[3]));
+  $('#dof-table').innerHTML = `<thead><tr>${C.map(c => th(c[0], c[1], c[2])).join('')}</tr></thead><tbody>` +
+    (list.length ? list.slice(0, 400).map(d => `<tr class="click" data-dof="${esc(d.id)}">${C.map(c => c[4](d)).join('')}</tr>`).join('')
+    : `<tr><td colspan="${C.length}"><div class="empty" style="border:0">${S.dofs.length ? 'Filtreye uyan DÖF yok.' : 'Henüz DÖF yok. “+ Yeni DÖF” ile ilk uygunsuzluğu kaydedin.'}</div></td></tr>`) + '</tbody>';
 }
 ['#dof-durum','#dof-lok','#dof-alt'].forEach(s => $(s).addEventListener('change', render)); $('#dof-q').addEventListener('input', render);
 $('#dof-new').addEventListener('click', () => openDof(null));
@@ -1612,7 +1633,7 @@ function rFields(fm = 'aktivite'){
     list.map((f, i) => `<tr data-ffm="${fm}"><td style="white-space:nowrap"><button class="btn sm" data-fup="${i}"${i === 0 ? ' disabled' : ''} aria-label="Yukarı taşı">↑</button> <button class="btn sm" data-fdown="${i}"${i === list.length - 1 ? ' disabled' : ''} aria-label="Aşağı taşı">↓</button></td>
       <td><b>${esc(f.ad)}</b>${f.sistem ? '' : ' <span class="muted">(özel)</span>'}</td><td>${esc(TIP[f.tip] || f.tip)}</td><td>${f.key === 'raporlayan' && fm === 'aktivite' ? 'Kullanıcılardan (' + RAP.length + ')' : f.kaynak ? esc(KAYNAK[f.kaynak]) : f.tip === 'liste' ? (f.secenekler || []).length + ' seçenek' : '—'}</td><td>${f.zorunlu ? 'Evet' : '—'}</td><td>${gor(f)}</td>
       <td><span class="pill ${f.aktif === false ? '' : 'ok'}">${f.aktif === false ? 'Gizli' : 'Açık'}</span></td>
-      <td style="white-space:nowrap"><button class="btn sm" data-fedit="${i}">Düzenle</button>${CORE.includes(f.key) ? '' : ` <button class="btn sm" data-ftog="${i}">${f.aktif === false ? 'Göster' : 'Gizle'}</button>`}${f.sistem ? '' : ` <button class="btn sm danger" data-fdel="${i}">Sil</button>`}</td></tr>`).join('') + '</tbody>';
+      <td style="white-space:nowrap"><button class="btn sm" data-fedit="${i}">Düzenle</button>${CORE.includes(f.key) ? '' : ` <button class="btn sm" data-ftog="${i}">${f.aktif === false ? 'Göster' : 'Gizle'}</button>`}${CORE.includes(f.key) ? '' : ` <button class="btn sm danger" data-fdel="${i}">Sil</button>`}</td></tr>`).join('') + '</tbody>';
 }
 document.addEventListener('click', async e => {
   if (!S.isAdmin) return;
@@ -1625,7 +1646,7 @@ document.addEventListener('click', async e => {
     if (b.dataset.fup != null) { const i = +b.dataset.fup; [arr[i-1], arr[i]] = [arr[i], arr[i-1]]; await saveFields_(arr); }
     else if (b.dataset.fdown != null) { const i = +b.dataset.fdown; [arr[i+1], arr[i]] = [arr[i], arr[i+1]]; await saveFields_(arr); }
     else if (b.dataset.ftog != null) { const i = +b.dataset.ftog; arr[i].aktif = arr[i].aktif === false; await saveFields_(arr); toast(arr[i].aktif ? 'Alan formda gösteriliyor' : 'Alan formdan gizlendi'); }
-    else if (b.dataset.fdel != null) { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } const dk = arr[+b.dataset.fdel].key; arr.splice(+b.dataset.fdel, 1); let dep = 0; arr.forEach(x => { if (x.kosul?.alan === dk) { x.kosul = null; dep++; } if (x.rapor === dk) x.rapor = ''; }); await saveFields_(arr); toast('Alan silindi; eski kayıtlardaki değerleri korunur' + (dep ? ` · ${dep} bağlı alan artık her zaman görünür` : '')); }
+    else if (b.dataset.fdel != null) { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } const dk = arr[+b.dataset.fdel].key; arr.splice(+b.dataset.fdel, 1); let dep = 0; arr.forEach(x => { if (x.kosul?.alan === dk) { x.kosul = null; dep++; } if (x.rapor === dk) x.rapor = ''; }); await saveFields_(arr); toast('Alan silindi: formdan ve tablolardan kaldırıldı. Eski kayıtlardaki değerler veritabanında korunur.' + (dep ? ` · ${dep} bağlı alan artık her zaman görünür` : '')); }
   } catch (err) { toast(adminErr(err)); }
 });
 function openFieldEditor(i, fid = 'aktivite'){
