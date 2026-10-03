@@ -65,7 +65,7 @@ if (!cfg.apiKey || !cfg.projectId) {
      (writeBatch kullanılmaz: güvenlik kuralları her yazmada profil okuduğu için Firestore'un toplu yazma başına
      20 okuma sınırına takılıp tüm paketi reddediyordu.) Geçici hatalarda bir kez yeniden dener. */
   const batch = async (ops, onProg) => { let i = 0, ok = 0; const fails = [];
-    const one = o => o.op === 'update' ? updateDoc(doc(fs, o.path), o.data) : setDoc(doc(fs, o.path), o.data);
+    const one = o => o.op === 'delete' ? deleteDoc(doc(fs, o.path)) : o.op === 'update' ? updateDoc(doc(fs, o.path), o.data) : setDoc(doc(fs, o.path), o.data);
     const code = e => String(e?.code || '').replace(/^firestore\//, '');
     const worker = async () => { while (i < ops.length) { const o = ops[i++];
       try { await one(o); }
@@ -234,6 +234,8 @@ tfoot td{font-weight:700;background:var(--surface-2)}
 form.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fld.full{grid-column:1/-1}
+td.chk,th.chk{width:1%;white-space:nowrap;text-align:center}
+td.chk input,th.chk input{width:18px;height:18px;cursor:pointer}
 .pcombo{position:relative}
 .pcombo-list{position:absolute;z-index:40;left:0;min-width:100%;width:max(100%,min(440px,calc(100vw - 32px)));top:100%;margin-top:4px;max-height:280px;overflow:auto;background:var(--surface,#fff);border:1px solid var(--line,#ddd);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
 .pcombo-list[hidden]{display:none}
@@ -459,6 +461,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
       <select id="pr-gorev" class="btn sm" aria-label="Görev"></select>
       <select id="pr-durum" class="btn sm" aria-label="Uygunluk"><option value="">Tüm uygunluk durumları</option><option value="uygun">Uygun</option><option value="degil">Uygun değil</option><option value="yakin">Süresi yaklaşan</option></select>
       <span class="muted" id="pr-count" style="font-size:.85rem"></span>
+      <button class="btn sm danger" id="pr-delsel" type="button" hidden>Seçilenleri sil</button>
     </div>
     <div class="tablewrap lim"><table id="pr-table"></table></div>
   </section>
@@ -1227,14 +1230,36 @@ function rPersonel(){
   const cols = (li >= 0 ? fs.slice(0, li + 1) : fs.slice(0, 6)).filter(f => f.tip !== 'uzun' && f.tip !== 'foto' && f.tip !== 'pdf');
   const list = pFiltre();
   $('#pr-count').textContent = `${list.length} / ${all.length} personel`;
-  $('#pr-table').innerHTML = `<thead><tr><th>Uygunluk</th>${cols.map(f => `<th>${esc(f.ad)}</th>`).join('')}</tr></thead><tbody>` +
-    (list.length ? list.slice(0, 600).map(p => `<tr class="click" data-per="${esc(p.id)}"><td>${pPill(pDurum(p))}</td>${cols.map(f => `<td>${f.key === 'adSoyad' ? `<b>${esc(p.adSoyad)}</b>` : esc(f.tip === 'tarih' ? trD(p[f.key]) : (p[f.key] ?? ''))}</td>`).join('')}</tr>`).join('')
-      : `<tr><td colspan="${cols.length + 1}"><div class="empty" style="border:0">${all.length ? 'Filtreye uyan personel yok.' : 'Henüz personel yok. “+ Personel” ile ekleyin veya Excel ile toplu yükleyin.'}</div></td></tr>`) + '</tbody>';
+  const ad = S.isAdmin, ids = new Set(all.map(p => p.id)); S.pSec = new Set([...(S.pSec || [])].filter(x => ids.has(x)));
+  const goster = list.slice(0, 600), hepsi = goster.length && goster.every(p => S.pSec.has(p.id));
+  const db_ = $('#pr-delsel'); db_.hidden = !ad || !S.pSec.size; db_.textContent = `Seçilenleri sil (${S.pSec.size})`;
+  $('#pr-table').innerHTML = `<thead><tr>${ad ? `<th class="chk"><input type="checkbox" id="pr-all" aria-label="Listedekilerin tümünü seç"${hepsi ? ' checked' : ''}></th>` : ''}<th>Uygunluk</th>${cols.map(f => `<th>${esc(f.ad)}</th>`).join('')}${ad ? '<th></th>' : ''}</tr></thead><tbody>` +
+    (list.length ? goster.map(p => `<tr class="click" data-per="${esc(p.id)}">${ad ? `<td class="chk"><input type="checkbox" data-psec="${esc(p.id)}" aria-label="${esc(p.adSoyad)} seç"${S.pSec.has(p.id) ? ' checked' : ''}></td>` : ''}<td>${pPill(pDurum(p))}</td>${cols.map(f => `<td>${f.key === 'adSoyad' ? `<b>${esc(p.adSoyad)}</b>` : esc(f.tip === 'tarih' ? trD(p[f.key]) : (p[f.key] ?? ''))}</td>`).join('')}${ad ? `<td class="chk"><button class="btn sm danger" type="button" data-pdel="${esc(p.id)}" title="Sil">Sil</button></td>` : ''}</tr>`).join('')
+      : `<tr><td colspan="${cols.length + (ad ? 3 : 1)}"><div class="empty" style="border:0">${all.length ? 'Filtreye uyan personel yok.' : 'Henüz personel yok. “+ Personel” ile ekleyin veya Excel ile toplu yükleyin.'}</div></td></tr>`) + '</tbody>';
   $('#pr-new').disabled = !S.db;
 }
 ['#pr-lok','#pr-firma','#pr-alt','#pr-durum','#pr-gorev'].forEach(s => $(s).addEventListener('change', render)); $('#pr-q').addEventListener('input', render);
 $('#pr-new').addEventListener('click', () => openPersonelForm(null));
-document.addEventListener('click', e => { const r = e.target.closest('[data-per]'); if (r) openPersonelKart(r.dataset.per); });
+document.addEventListener('click', e => { if (e.target.closest('td.chk, th.chk')) return; const r = e.target.closest('[data-per]'); if (r) openPersonelKart(r.dataset.per); });
+/* Personel silme (yalnızca yönetici): satırdaki Sil ile tek tek, kutucuklarla seçip toplu */
+document.addEventListener('change', e => { const t = e.target;
+  if (t.dataset?.psec) { S.pSec = S.pSec || new Set(); t.checked ? S.pSec.add(t.dataset.psec) : S.pSec.delete(t.dataset.psec); render(); }
+  else if (t.id === 'pr-all') { S.pSec = S.pSec || new Set(); pFiltre().slice(0, 600).forEach(p => t.checked ? S.pSec.add(p.id) : S.pSec.delete(p.id)); render(); } });
+document.addEventListener('click', async e => { const b = e.target.closest('[data-pdel]'); if (!b || !S.isAdmin) return; const p = S.personel.find(x => x.id === b.dataset.pdel); if (!p) return;
+  if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'Sil'; } }, 3500); return; }
+  b.disabled = true; try { await S.db.doc('personel/' + p.id).delete(); S.pSec?.delete(p.id); toast(`${p.adSoyad} silindi`); } catch (err) { b.disabled = false; toast('Silinemedi: ' + err.message); } });
+$('#pr-delsel').addEventListener('click', () => { if (!S.isAdmin || !S.pSec?.size) return; const sec = S.personel.filter(p => S.pSec.has(p.id)); if (!sec.length) return;
+  const o = sheet(`<header><h2>${sec.length} personel silinecek</h2><button class="btn sm" data-close>Vazgeç</button></header>
+    <p>Seçilen personel kayıtları <b>kalıcı olarak</b> silinecek. Bu işlem geri alınamaz. İsterseniz önce “Excel indir” ile yedek alın.</p>
+    <div class="tablewrap" style="max-height:220px;overflow:auto;margin:10px 0"><table><tbody>${sec.slice(0, 300).map(p => `<tr><td>${esc(p.adSoyad)}</td><td class="muted">${esc([p.firma, p.lokasyon].filter(Boolean).join(' · '))}</td></tr>`).join('')}${sec.length > 300 ? `<tr><td colspan="2" class="muted">+${sec.length - 300} kişi daha</td></tr>` : ''}</tbody></table></div>
+    <div class="fld"><label for="ps-onay">Onaylamak için <b>SİL</b> yazın</label><input id="ps-onay" autocomplete="off"></div>
+    <div class="bar" style="margin-top:12px"><button class="btn danger" id="ps-go" type="button" disabled>${sec.length} personeli sil</button></div>
+    <p class="muted" id="ps-msg" style="font-size:.9rem"></p><div class="progress" id="ps-prog" hidden><div></div></div>`);
+  const go = o.querySelector('#ps-go'), inp = o.querySelector('#ps-onay');
+  inp.addEventListener('input', () => { go.disabled = tru(inp.value) !== 'SİL'; });
+  go.addEventListener('click', async () => { go.disabled = true; inp.disabled = true; const P = ilerleme(o.querySelector('#ps-prog'), o.querySelector('#ps-msg'), sec.length, 'Siliniyor');
+    try { await S.db.batch(sec.map(p => ({ path:'personel/' + p.id, op:'delete' })), n => P.set(n)); P.set(sec.length); P.bitir(`Bitti: %100 · ${sec.length} personel silindi · süre ${P.sure()}.`); S.pSec = new Set(); toast(`${sec.length} personel silindi`); setTimeout(() => o.remove(), 900); }
+    catch (err) { P.bitir(`%${P.yuzde()} · ${P.n} personel silindi, kalan ${sec.length - P.n} silinemedi (${err.message}) · süre ${P.sure()}.`); } }); });
 function openPersonelKart(id){
   const p = S.personel.find(x => x.id === id); if (!p) return;
   const d = pDegerlendir(p), fs = FF('personel').filter(f => f.aktif !== false && f.tip !== 'foto' && f.tip !== 'pdf');
@@ -1497,7 +1522,9 @@ TOPLU.personel = { ad:'Personel', col:'personel', on:'p-', sayfa:'PERSONEL BİLG
   cols: () => genCols('personel'),
   fix(r){ r.adSoyad = nameCase(r.adSoyad); if (!r.adSoyad) return 'Adı Soyadı boş'; },
   key: r => tru(r.adSoyad),
-  mevcut: () => S.personel.map(x => x.id) };
+  mevcut: () => S.personel.map(x => x.id),
+  /* aynı isimli mevcut kayıt (elle eklenmiş olsa bile) güncellenir; çoğaltma yapılmaz */
+  esle: () => { const m = new Map(); for (const x of S.personel) { const k = tru(x.adSoyad); if (!m.has(k)) m.set(k, []); m.get(k).push(x.id); } return m; } };
 const hdrKey = v => tru(String(v ?? '').replace(/\*/g, '')).replace(/[^A-ZÇĞİÖŞÜ0-9]/g, '');
 function tpDate(v){
   if (v instanceof Date && !isNaN(v)) return ymd(v);
@@ -1526,7 +1553,7 @@ function tpParse(tur, rows){
   let hi = rows.findIndex(r => (r || []).some(c => cols.some(([h, , , , al]) => [h, ...(al || [])].some(x => hdrKey(c) === hdrKey(x))))); if (hi < 0) throw new Error('Başlık satırı bulunamadı. Lütfen indirdiğiniz şablonu kullanın.');
   const head = rows[hi].map(hdrKey), idx = cols.map(([h, , , , al]) => { let i = head.indexOf(hdrKey(h)); (al || []).forEach(a => { if (i < 0) i = head.indexOf(hdrKey(a)); }); return i; });
   const eksik = cols.filter(([, , , req], i) => req && idx[i] < 0).map(([h]) => h); if (eksik.length) throw new Error('Şablonda zorunlu sütun eksik: ' + eksik.join(', '));
-  const ctx = { no:{} }, out = [], seen = {}, var_ = new Set(T.mevcut());
+  const ctx = { no:{} }, out = [], seen = {}, var_ = new Set(T.mevcut()); let ESLE = null;
   rows.slice(hi + 1).forEach((row, i) => {
     if (!(row || []).some(c => String(c ?? '').trim())) return;
     const r = {}, errs = [];
@@ -1536,7 +1563,7 @@ function tpParse(tur, rows){
     const line = hi + i + 2;
     if (errs.length) return out.push({ line, err:errs.join(' · ') });
     const canon = T.key(r); const n = seen[canon] || 0; seen[canon] = n + 1;
-    const id = T.on + fnv(canon) + (n ? '-' + n : '');
+    const id = (T.esle && (ESLE || (ESLE = T.esle())).get(canon)?.[n]) || T.on + fnv(canon) + (n ? '-' + n : '');
     out.push({ line, id, rec: r.tarih ? { ...r, yil:+r.tarih.slice(0, 4), hafta:isoWeek(parseD(r.tarih)).w } : { ...r }, var:var_.has(id) });
   });
   return out;
