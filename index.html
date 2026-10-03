@@ -426,6 +426,22 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
     <div class="tablewrap lim"><table id="cz-table"></table></div>
   </section>
 
+  <!-- PERSONEL BİLGİ -->
+  <section class="view" id="v-personel" hidden>
+    <div class="bar"><h2 class="grow">Personel Bilgi</h2><button class="btn primary" id="pr-new" type="button">+ Personel</button><button class="btn" data-toplu="personel" type="button">Excel ile toplu giriş</button><button class="btn" data-pxl type="button">Excel indir</button></div>
+    <div class="kpis" id="pr-kpis"></div>
+    <div class="bar" style="flex-wrap:wrap">
+      <input id="pr-q" class="btn sm grow" placeholder="İsimle ara" style="font-weight:400;min-width:180px">
+      <select id="pr-lok" class="btn sm" aria-label="Lokasyon"></select>
+      <select id="pr-firma" class="btn sm" aria-label="Firma"></select>
+      <select id="pr-alt" class="btn sm" aria-label="Alt yüklenici"></select>
+      <select id="pr-gorev" class="btn sm" aria-label="Görev"></select>
+      <select id="pr-durum" class="btn sm" aria-label="Uygunluk"><option value="">Tüm uygunluk durumları</option><option value="uygun">Uygun</option><option value="degil">Uygun değil</option><option value="yakin">Süresi yaklaşan</option></select>
+      <span class="muted" id="pr-count" style="font-size:.85rem"></span>
+    </div>
+    <div class="tablewrap lim"><table id="pr-table"></table></div>
+  </section>
+
   <!-- FOTOĞRAFLAR -->
   <section class="view" id="v-foto" hidden>
     <div class="bar"><h2 class="grow">Fotoğraf arşivi</h2><button class="btn" id="ph-zip">Tümünü ZIP indir</button></div>
@@ -482,6 +498,18 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
       <header><h2>Ceza formu</h2><button class="btn primary sm" data-fadd="ceza" type="button">+ Alan ekle</button></header>
       <p class="muted" style="margin:0 0 12px;font-size:.9rem">Ceza kayıt formundaki alanlar. Kurallar DÖF formuyla aynıdır.</p>
       <div class="tablewrap"><table id="fa-table-ceza"></table></div>
+    </div>
+    <div class="panel">
+      <header><h2>Personel formu</h2><button class="btn primary sm" data-fadd="personel" type="button">+ Alan ekle</button></header>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">Personel Bilgi kartındaki alanlar. Personel tablosunda alan sırasına göre <b>Çalıştığı Lokasyon</b>'a kadar olan alanlar gösterilir; diğerleri kişiye tıklayınca açılır.</p>
+      <div class="tablewrap"><table id="fa-table-personel"></table></div>
+    </div>
+    <div class="panel">
+      <header><h2>Personel uygunluk kuralları</h2><button class="btn primary sm" id="kr-add" type="button">+ Kural ekle</button></header>
+      <p class="muted" style="margin:0 0 12px;font-size:.9rem">Personel, açık kuralların hepsini sağlıyorsa <b>Uygun</b>, birini bile sağlamıyorsa <b>Uygun değil</b> işaretlenir. Kuralları tek tek düzenleyebilir veya Excel ile toplu yükleyebilirsiniz.</p>
+      <div class="tablewrap"><table id="kr-table"></table></div>
+      <div class="bar" style="margin-top:12px;flex-wrap:wrap"><label for="kr-uyari" class="muted">Süre dolmasına kaç gün kala uyarılsın</label><input id="kr-uyari" type="number" min="0" max="365" class="btn sm" style="width:90px"><span class="grow"></span><button class="btn sm" id="kr-sablon" type="button">Kuralları Excel'e indir / şablon</button><label class="btn sm" for="kr-file" style="cursor:pointer">Excel'den kural yükle</label><input type="file" id="kr-file" accept=".xlsx,.xls" hidden></div>
+      <p class="muted" id="kr-msg2" style="font-size:.88rem"></p>
     </div>
         <div class="panel">
       <header><h2>Excel'den içe aktar</h2></header>
@@ -707,7 +735,7 @@ const actsWeek = (y, w) => acts().filter(a => a.haftaYil === y && a.hafta === w)
 const inWeek = (s, y, w) => { const d = parseD(s); if (!d) return false; const i = isoWeek(d); return i.y === y && i.w === w; };
 
 /* ---------- sekmeler ---------- */
-const TABS = [['aktivite','Aktivite'],['kaza','Kaza Rapor'],['foto','Fotoğraflar'],['rapor','Rapor'],['dof','DÖF'],['ceza','Ceza'],['kullanici','Kullanıcılar'],['ayar','Ayarlar'],['hesap','Hesabım']];
+const TABS = [['aktivite','Aktivite'],['kaza','Kaza Rapor'],['foto','Fotoğraflar'],['rapor','Rapor'],['dof','DÖF'],['ceza','Ceza'],['personel','Personel Bilgi'],['kullanici','Kullanıcılar'],['ayar','Ayarlar'],['hesap','Hesabım']];
 function renderTabs(){
   $('#tabs').innerHTML = TABS.filter(t => !['ayar','kullanici'].includes(t[0]) || S.isAdmin).map(([k,l]) => `<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}</button>`).join('');
 }
@@ -728,7 +756,7 @@ function render(){ cancelAnimationFrame(raf); raf = requestAnimationFrame(doRend
 function doRender(){
   
   if (!AUTH.me) return;
-  const r = { aktivite:rAkt, ceza:rCeza, dof:rDof, kaza:rKaza, foto:rFoto, rapor:rRapor, ayar:rAyar, kullanici:rKullanici, hesap:rHesap }[S.tab];
+  const r = { aktivite:rAkt, personel:rPersonel, ceza:rCeza, dof:rDof, kaza:rKaza, foto:rFoto, rapor:rRapor, ayar:rAyar, kullanici:rKullanici, hesap:rHesap }[S.tab];
   try { r && r(); } catch (err) { console.error(err); toast('Bu sayfada okunamayan bir kayıt var; yöneticinize bildirin.'); }
 }
 
@@ -820,7 +848,7 @@ function fieldHtml(f){
   if (f.tip === 'sayi') return wrap(`<input type="number" id="${esc(id)}" min="0" inputmode="numeric"${ph}>`);
   if (f.tip === 'uzun') return wrap(`<textarea id="${esc(id)}"${ph}></textarea>`, true);
   if (f.tip === 'foto') return wrap(`<div class="drop" data-for="${esc(id)}"><input type="file" id="${esc(id)}" accept="image/*" multiple><div class="thumbs"></div><span class="hint">${esc(f.yer || "Fotoğraflar 1600 px'e küçültülerek yüklenir. Hafta ve lokasyona göre klasörlenir.")}</span></div>`, true);
-  return wrap(`<input id="${esc(id)}"${ph}>`);
+  return wrap(`<input id="${esc(id)}"${ph}${f.key === 'personel' ? ' list="personel-dl" autocomplete="off"' : ''}>`);
 }
 /* Koşullu alanlar: bir alan, başka bir liste alanında seçilen değere göre açılır. Zincir desteklenir (üst alan gizliyse alt alan da gizlenir). */
 function fieldVisible(fs, valOf){
@@ -974,13 +1002,13 @@ function genFieldHtml(f, pfx, val){
 }
 /* Kayıt formu: DÖF ve Ceza için ortak */
 function openGenForm(fm, rec, cfg){
-  const fs = FF(fm).filter(f => f.aktif !== false), pfx = fm === 'dof' ? 'd-' : 'c-';
+  const fs = FF(fm).filter(f => f.aktif !== false), pfx = fm === 'dof' ? 'd-' : fm === 'personel' ? 'p-' : 'c-';
   const v = rec || cfg.yeni();
   const val = f => f.tip === 'pdf' ? { id:v[f.key + 'Id'], ad:v[f.key + 'Ad'] } : v[f.key];
   const canDel = rec && S.isAdmin;
   const o = sheet(`<header><h2>${esc(cfg.baslik(rec))}</h2><button class="btn sm" data-close>Kapat</button></header>
   <form class="f" id="f-gen" novalidate>
-    <div class="fld"><label for="${pfx}tarih">Tarih <span class="req">*</span></label><input type="date" id="${pfx}tarih" value="${esc(v.tarih || ymd(today))}"></div>
+    ${cfg.tarihYok ? '' : `<div class="fld"><label for="${pfx}tarih">Tarih <span class="req">*</span></label><input type="date" id="${pfx}tarih" value="${esc(v.tarih || ymd(today))}"></div>`}
     ${fs.map(f => genFieldHtml(f, pfx, val(f))).join('')}
     <div class="actions"><button class="btn primary" type="submit" id="g-save"${!S.db || !S.canWrite ? ' disabled' : ''}>${rec ? 'Güncelle' : 'Kaydet'}</button>${canDel ? '<button class="btn danger" type="button" id="g-del">Sil</button>' : ''}<span class="muted" id="g-msg"></span></div>
   </form>`);
@@ -995,10 +1023,10 @@ function openGenForm(fm, rec, cfg){
   const del = f.querySelector('#g-del');
   if (del) del.addEventListener('click', async () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = 'Emin misiniz? Sil'; setTimeout(() => { delete del.dataset.sure; del.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc(cfg.col + '/' + rec.id).delete(); o.remove(); toast('Kayıt silindi'); } catch (err) { toast('Silinemedi: ' + err.message); } });
   f.addEventListener('submit', async e => { e.preventDefault(); const m = f.querySelector('#g-msg'), btn = f.querySelector('#g-save');
-    const tarih = q('tarih').value; if (!tarih) return m.textContent = 'Tarih zorunlu.';
+    const tarih = cfg.tarihYok ? '' : q('tarih').value; if (!cfg.tarihYok && !tarih) return m.textContent = 'Tarih zorunlu.';
     const gor = fs.filter(x => { const w = f.querySelector(`[data-key="${CSS.escape(x.key)}"]`); return w && !w.hidden; });
     for (const x of gor) { if (!x.zorunlu) continue; const empty = x.tip === 'foto' ? !((pending[pfx + x.key] || []).length || (v[x.key] || []).length) : x.tip === 'pdf' ? !(q(x.key).files[0] || bid(v[x.key + 'Id'])) : !String(q(x.key)?.value || '').trim(); if (empty) return m.textContent = `${x.ad} zorunlu.`; }
-    const r = { tarih };
+    const r = cfg.tarihYok ? {} : { tarih };
     gor.forEach(x => { if (x.tip === 'foto' || x.tip === 'pdf') return; const el = q(x.key), s = el ? el.value : '';
       r[x.key] = x.tip === 'sayi' ? (s === '' ? null : Math.max(0, Number(s))) : x.tip === 'uzun' || x.tip === 'metin' ? s.trim() : s; });
     const hata = cfg.dogrula && cfg.dogrula(r, f, q); if (hata) return m.textContent = hata;
@@ -1007,7 +1035,7 @@ function openGenForm(fm, rec, cfg){
     try {
       for (const x of fs.filter(y => y.tip === 'foto')) r[x.key] = [...(v[x.key] || []), ...(gor.includes(x) ? await uploadAll(pfx + x.key, m) : [])];
       for (const x of gor.filter(y => y.tip === 'pdf')) { const file = q(x.key).files[0]; r[x.key + 'Id'] = bid(v[x.key + 'Id']) || ''; r[x.key + 'Ad'] = v[x.key + 'Ad'] || ''; if (file) { m.textContent = 'PDF yükleniyor…'; const up = await S.files.upload(file, { type:'application/pdf' }); r[x.key + 'Id'] = up.id; r[x.key + 'Ad'] = file.name.slice(0, 120); } }
-      const d = parseD(tarih); r.yil = d.getFullYear();
+      if (!cfg.tarihYok) r.yil = parseD(tarih).getFullYear();
       cfg.son && cfg.son(r, rec);
       r.guncelleyen = S.meId; r.guncelleme = new Date().toISOString();
       m.textContent = 'Kaydediliyor…';
@@ -1088,6 +1116,209 @@ function nextFormNo(bildiren){
   return `${ini}_${pad((seqs.length ? Math.max(...seqs) : 0) + 1)}`;
 }
 function sheet(html){ const o = document.createElement('div'); o.className = 'overlay'; o.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`; o.addEventListener('click', e => { if (e.target === o || e.target.closest('[data-close]')) o.remove(); }); $('#layer').appendChild(o); return o; }
+/* ---------- PERSONEL BİLGİ ----------
+   Alanlar Ayarlar → Personel formu'ndan (admin), uygunluk kuralları Ayarlar → Personel uygunluk kuralları'ndan yönetilir.
+   Her personel, açık kurallara göre "Uygun" / "Uygun değil" işaretlenir; süresi yaklaşanlar ayrıca uyarılır. */
+const EH = ['Evet','Hayır'];
+const DEFAULT_PERSONEL = [
+  { key:'adSoyad', ad:'Adı Soyadı', tip:'metin', secenekler:[], zorunlu:true, aktif:true, sistem:true, kosul:null, yer:'Ad Soyad' },
+  { key:'firma', ad:'Firma Adı', tip:'liste', secenekler:uniq(['Mikrolink', ...DEF.altyukleniciler.filter(x => x !== 'Mikrolink')]), zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'altYuklenici', ad:'Alt Yüklenici', tip:'liste', secenekler:['Toreks Enerji Ve Teknoloji','Yaprak Nafiye Türkmen','Borusan','Sensör Yangın','Socomec','Ateş Mühendislik','Sbc Otomasyon','Mepa Enerji','Polarite','CRC Elektronik','Vertiv','Akdal İnşaat','Schneider','Dacel'], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'gorev', ad:'Görevi', tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'ör. Elektrik Teknikeri' },
+  { key:'myb', ad:'Mesleki Yeterlilik Belgesi', tip:'liste', secenekler:['Var','Yok','MYK'], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'lokasyon', ad:'Çalıştığı Lokasyon', tip:'liste', secenekler:uniq(['Tüm Bölgeler', ...DEF.lokasyonlar.filter(x => x !== 'Diğer'), 'İstanbul', 'Diğer']), zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'iseGiris', ad:'İşe Giriş (SGK) Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'vf8Tarih', ad:'VF 8 Mutlak Kural / Başlangıç Eğitimi Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'saglikTarih', ad:'Sağlık Raporu Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'saglikYer', ad:'Sağlık Raporu Alınan Yer', tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'yasalTarih', ad:'Yasal İş Güvenliği Eğitim Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'temelTarih', ad:'Temel İSG Eğitim Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'temelFirma', ad:'Temel İSG Eğitim Firması', tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'elektrikIsi', ad:'Elektrik işi yapacak mı?', tip:'liste', secenekler:EH, zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'elektrikTarih', ad:'Elektrik Eğitim Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'elektrikIsi', degerler:['Evet'] }, yer:'' },
+  { key:'elektrikFirma', ad:'Elektrik Eğitim Firması', excel:['ELEKTRİK FİRMASI'], tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'elektrikIsi', degerler:['Evet'] }, yer:'' },
+  { key:'ycIsi', ad:'Yüksekte çalışacak mı?', tip:'liste', secenekler:EH, zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'ycTarih', ad:'Yüksekte Çalışma Eğitim Tarihi', excel:['Y. ÇALIŞMA Eğitim Tarihi'], tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'ycIsi', degerler:['Evet'] }, yer:'' },
+  { key:'ycFirma', ad:'Yüksekte Çalışma Eğitim Firması', excel:['Y. ÇALIŞMA Eğitim Firması'], tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'ycIsi', degerler:['Evet'] }, yer:'' },
+  { key:'aracIsi', ad:'Araç kullanacak mı?', tip:'liste', secenekler:EH, zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'aracTarih', ad:'Güvenli Sürüş Eğitim Tarihi', tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'aracIsi', degerler:['Evet'] }, yer:'' },
+  { key:'aracFirma', ad:'Güvenli Sürüş Eğitim Firması', excel:['GÜV. SÜRÜŞ Eğitim Firması'], tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'aracIsi', degerler:['Evet'] }, yer:'' },
+  { key:'ilkyardim', ad:'İlkyardım Eğitimi Var mı?', tip:'liste', secenekler:EH, zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' },
+  { key:'ilkyardimTarih', ad:'İlkyardım Eğitim Tarihi', excel:['İLKYARDIM Eğitim Tarih'], tip:'tarih', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'ilkyardim', degerler:['Evet'] }, yer:'' },
+  { key:'ilkyardimFirma', ad:'İlkyardım Eğitim Firması', excel:['İLKYARDIM Eğitim Firma'], tip:'metin', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:{ alan:'ilkyardim', degerler:['Evet'] }, yer:'' },
+  { key:'notlar', ad:'Notlar / Açıklamalar', tip:'uzun', secenekler:[], zorunlu:false, aktif:true, sistem:true, kosul:null, yer:'' }
+];
+FORMLAR.personel = { ad:'Personel formu', doc:'ayarlar/personelFormu', def:() => DEFAULT_PERSONEL, core:['adSoyad'] };
+
+/* Uygunluk kuralları — tur: 'gecerli' (tarih + süre dolmamış olmalı), 'dolu' (boş olmamalı), 'deger' (izinli değerlerden biri olmalı).
+   kosulAlan/kosulDeger: kural yalnızca o alan bu değerdeyken uygulanır (ör. Elektrik işi yapacak mı = Evet). */
+const DEFAULT_KURALLAR = [
+  { id:'k1', ad:'VF 8 Mutlak Kural / Başlangıç eğitimi geçerli olmalı', tur:'gecerli', alan:'vf8Tarih', sureGun:365, kosulAlan:'', kosulDeger:'', degerler:[], aktif:true },
+  { id:'k2', ad:'Sağlık raporu geçerli olmalı (1 yıl)', tur:'gecerli', alan:'saglikTarih', sureGun:365, kosulAlan:'', kosulDeger:'', degerler:[], aktif:true },
+  { id:'k3', ad:'Yasal iş güvenliği eğitimi geçerli olmalı (1 yıl)', tur:'gecerli', alan:'yasalTarih', sureGun:365, kosulAlan:'', kosulDeger:'', degerler:[], aktif:true },
+  { id:'k4', ad:'Temel İSG eğitimi geçerli olmalı (1 yıl)', tur:'gecerli', alan:'temelTarih', sureGun:365, kosulAlan:'', kosulDeger:'', degerler:[], aktif:true },
+  { id:'k5', ad:'Elektrik işi yapacaksa elektrik eğitimi geçerli olmalı (1 yıl)', tur:'gecerli', alan:'elektrikTarih', sureGun:365, kosulAlan:'elektrikIsi', kosulDeger:'Evet', degerler:[], aktif:true },
+  { id:'k6', ad:'Yüksekte çalışacaksa yüksekte çalışma eğitimi geçerli olmalı (2 yıl)', tur:'gecerli', alan:'ycTarih', sureGun:730, kosulAlan:'ycIsi', kosulDeger:'Evet', degerler:[], aktif:true },
+  { id:'k7', ad:'Araç kullanacaksa güvenli sürüş eğitimi geçerli olmalı (2 yıl)', tur:'gecerli', alan:'aracTarih', sureGun:730, kosulAlan:'aracIsi', kosulDeger:'Evet', degerler:[], aktif:true },
+  { id:'k8', ad:'İlkyardım eğitimi varsa geçerli olmalı (3 yıl)', tur:'gecerli', alan:'ilkyardimTarih', sureGun:1095, kosulAlan:'ilkyardim', kosulDeger:'Evet', degerler:[], aktif:true },
+  { id:'k9', ad:'Mesleki yeterlilik belgesi olmalı (Var / MYK)', tur:'deger', alan:'myb', sureGun:0, kosulAlan:'', kosulDeger:'', degerler:['Var','MYK'], aktif:true }
+];
+const KURAL_TUR = { gecerli:'Tarih geçerli olmalı', dolu:'Boş olmamalı', deger:'İzin verilen değerlerden biri olmalı' };
+const kurallar = () => { const k = S.kurallar; const a = Array.isArray(k?.kurallar) ? k.kurallar.filter(x => x && typeof x.ad === 'string' && Object.hasOwn(KURAL_TUR, x.tur) && KEY_RE.test(x.alan || '')) : null; return a || DEFAULT_KURALLAR; };
+const uyariGun = () => { const n = Number(S.kurallar?.uyariGun); return Number.isFinite(n) && n >= 0 && n <= 365 ? n : 30; };
+const pAd = k => FF('personel').find(f => f.key === k)?.ad || k;
+function addGun(s, n){ const d = parseD(s); if (!d) return null; const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); return ymd(x); }
+/* Bir personeli açık kurallara göre değerlendirir */
+function pDegerlendir(p){
+  const bugun = ymd(new Date()), ug = uyariGun(), sorun = [], yakin = [], bitis = {};
+  for (const k of kurallar()) { if (k.aktif === false) continue;
+    if (k.kosulAlan && tru(p[k.kosulAlan]) !== tru(k.kosulDeger)) continue;
+    const v = p[k.alan];
+    if (k.tur === 'dolu') { if (!String(v ?? '').trim()) sorun.push(`${pAd(k.alan)} boş`); continue; }
+    if (k.tur === 'deger') { const izin = (k.degerler || []).map(tru); if (!izin.includes(tru(v))) sorun.push(`${pAd(k.alan)}: ${v ? `"${v}"` : 'boş'} (gerekli: ${(k.degerler || []).join(' / ')})`); continue; }
+    if (k.tur === 'gecerli') { if (!parseD(v)) { sorun.push(`${pAd(k.alan)} yok`); continue; }
+      const son = addGun(v, Number(k.sureGun) || 0); bitis[k.alan] = son;
+      const kalan = Math.round((parseD(son) - parseD(bugun)) / 864e5);
+      if (kalan < 0) sorun.push(`${pAd(k.alan).replace(/ Tarihi?$/i, '')} süresi dolmuş (${trD(son)}, ${-kalan} gün önce)`);
+      else if (kalan <= ug) yakin.push(`${pAd(k.alan).replace(/ Tarihi?$/i, '')} ${kalan} gün içinde doluyor (${trD(son)})`); }
+  }
+  return { uygun:!sorun.length, sorun, yakin, bitis };
+}
+Object.defineProperty(S, 'personel', { get(){ return S._pc || (S._pc = (S._pRaw || []).map(r => { const o = {}; for (const [k, v] of Object.entries(r || {})) { if (BAD_KEYS.has(k)) continue; o[k] = (v == null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') ? v : ''; } return o; }).filter(p => p.adSoyad).map(p => ({ ...p, adSoyad:nameCase(p.adSoyad) })).sort((a, b) => a.adSoyad.localeCompare(b.adSoyad, 'tr'))); }, configurable:true });
+const pDurum = p => { const d = pDegerlendir(p); return d.uygun ? (d.yakin.length ? 'yakin' : 'uygun') : 'degil'; };
+const pPill = d => d === 'degil' ? '<span class="pill crit">Uygun değil</span>' : d === 'yakin' ? '<span class="pill warn">Uygun · süre yaklaşıyor</span>' : '<span class="pill ok">Uygun</span>';
+
+function pFiltre(){ const q = tru($('#pr-q').value), lk = $('#pr-lok').value, fi = $('#pr-firma').value, al = $('#pr-alt').value, du = $('#pr-durum').value, go = $('#pr-gorev').value;
+  return S.personel.filter(p => (!q || tru(p.adSoyad).includes(q)) && (!lk || p.lokasyon === lk) && (!fi || p.firma === fi) && (!al || (al === '__yok' ? !p.altYuklenici : p.altYuklenici === al)) && (!go || p.gorev === go) && (!du || (du === 'degil' ? pDurum(p) === 'degil' : du === 'yakin' ? pDurum(p) === 'yakin' : pDurum(p) !== 'degil'))); }
+function rPersonel(){
+  const all = S.personel, sel = (id, vals, blank) => { const el = $(id), cur = el.value; el.innerHTML = opts(vals, cur, blank); };
+  sel('#pr-lok', uniq(all.map(p => p.lokasyon).filter(Boolean)).sort((a, b) => a.localeCompare(b, 'tr')), 'Tüm lokasyonlar');
+  sel('#pr-firma', uniq(all.map(p => p.firma).filter(Boolean)), 'Tüm firmalar');
+  { const el = $('#pr-alt'), cur = el.value; el.innerHTML = opts(uniq(all.map(p => p.altYuklenici).filter(Boolean)).sort((a, b) => a.localeCompare(b, 'tr')), cur, 'Tüm alt yükleniciler') + `<option value="__yok"${cur === '__yok' ? ' selected' : ''}>Alt yüklenicisiz</option>`; }
+  sel('#pr-gorev', uniq(all.map(p => p.gorev).filter(Boolean)).sort((a, b) => a.localeCompare(b, 'tr')), 'Tüm görevler');
+  const durs = all.map(pDurum);
+  $('#pr-kpis').innerHTML = [[all.length, 'Personel'], [durs.filter(d => d !== 'degil').length, 'Uygun'], [durs.filter(d => d === 'degil').length, 'Uygun değil', true], [durs.filter(d => d === 'yakin').length, `${uyariGun()} gün içinde süresi dolacak`]].map(([v, l, al]) => `<div class="kpi${al && v ? ' alert' : ''}"><div class="v num">${v}</div><div class="l">${esc(l)}</div></div>`).join('');
+  /* Tabloda alan sırasıyla "Çalıştığı Lokasyon"a kadar olan alanlar; diğerleri kişiye tıklayınca açılan pencerede */
+  const fs = FF('personel').filter(f => f.aktif !== false), li = fs.findIndex(f => f.key === 'lokasyon');
+  const cols = (li >= 0 ? fs.slice(0, li + 1) : fs.slice(0, 6)).filter(f => f.tip !== 'uzun' && f.tip !== 'foto' && f.tip !== 'pdf');
+  const list = pFiltre();
+  $('#pr-count').textContent = `${list.length} / ${all.length} personel`;
+  $('#pr-table').innerHTML = `<thead><tr><th>Uygunluk</th>${cols.map(f => `<th>${esc(f.ad)}</th>`).join('')}</tr></thead><tbody>` +
+    (list.length ? list.slice(0, 600).map(p => `<tr class="click" data-per="${esc(p.id)}"><td>${pPill(pDurum(p))}</td>${cols.map(f => `<td>${f.key === 'adSoyad' ? `<b>${esc(p.adSoyad)}</b>` : esc(f.tip === 'tarih' ? trD(p[f.key]) : (p[f.key] ?? ''))}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="${cols.length + 1}"><div class="empty" style="border:0">${all.length ? 'Filtreye uyan personel yok.' : 'Henüz personel yok. “+ Personel” ile ekleyin veya Excel ile toplu yükleyin.'}</div></td></tr>`) + '</tbody>';
+  $('#pr-new').disabled = !S.db;
+}
+['#pr-lok','#pr-firma','#pr-alt','#pr-durum','#pr-gorev'].forEach(s => $(s).addEventListener('change', render)); $('#pr-q').addEventListener('input', render);
+$('#pr-new').addEventListener('click', () => openPersonelForm(null));
+document.addEventListener('click', e => { const r = e.target.closest('[data-per]'); if (r) openPersonelKart(r.dataset.per); });
+function openPersonelKart(id){
+  const p = S.personel.find(x => x.id === id); if (!p) return;
+  const d = pDegerlendir(p), fs = FF('personel').filter(f => f.aktif !== false && f.tip !== 'foto' && f.tip !== 'pdf');
+  const vis = fieldVisible(fs, k => p[k] || '');
+  const satir = f => { const v = p[f.key]; const b = d.bitis[f.key]; return `<div><span class="muted">${esc(f.ad)}</span><b>${esc(f.tip === 'tarih' ? (trD(v) || '—') : (v ?? '') === '' ? '—' : v)}${b ? ` <span class="muted" style="font-weight:400">· geçerlilik ${esc(trD(b))}</span>` : ''}</b></div>`; };
+  const o = sheet(`<header><h2>${esc(p.adSoyad)}</h2><span class="hdr-r">${pPill(pDurum(p))}<button class="btn sm" id="pk-edit" type="button">Düzenle</button>${S.isAdmin ? '<button class="btn sm danger" id="pk-del" type="button">Sil</button>' : ''}<button class="btn sm" data-close>Kapat</button></span></header>
+    ${d.sorun.length ? `<div class="banner warn" style="margin-bottom:12px"><b>Uygun değil:</b><ul style="margin:6px 0 0 18px;padding:0">${d.sorun.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    ${d.yakin.length ? `<div class="banner" style="margin-bottom:12px"><b>Yaklaşan süreler:</b><ul style="margin:6px 0 0 18px;padding:0">${d.yakin.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    <div class="kv">${fs.filter(f => vis(f.key)).map(satir).join('')}</div>`);
+  o.querySelector('#pk-edit').addEventListener('click', () => { o.remove(); openPersonelForm(id); });
+  const del = o.querySelector('#pk-del');
+  if (del) del.addEventListener('click', async () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = 'Emin misiniz?'; setTimeout(() => { delete del.dataset.sure; del.textContent = 'Sil'; }, 3500); return; } try { await S.db.doc('personel/' + id).delete(); o.remove(); toast('Personel silindi'); } catch (err) { toast('Silinemedi: ' + err.message); } });
+}
+function openPersonelForm(id){
+  const p = id ? S.personel.find(x => x.id === id) : null; if (id && !p) return;
+  openGenForm('personel', p, { col:'personel', tarihYok:true,
+    yeni: () => ({ firma:'Mikrolink' }),
+    baslik: r => r ? r.adSoyad : 'Yeni personel',
+    dogrula(r){ if ('adSoyad' in r) { r.adSoyad = nameCase(r.adSoyad); if (!p && S.personel.some(x => tru(x.adSoyad) === tru(r.adSoyad))) return 'Bu adla kayıtlı bir personel var; listeden açıp düzenleyin.'; } },
+    tamam: rec => rec ? 'Personel güncellendi' : 'Personel eklendi' });
+}
+document.addEventListener('click', async e => { const b = e.target.closest('[data-pxl]'); if (!b) return; if (!window.XLSX) return toast('Excel kütüphanesi yüklenemedi');
+  const list = pFiltre(); if (!list.length) return toast('İndirilecek personel yok');
+  const fs = FF('personel').filter(f => f.aktif !== false && f.tip !== 'foto' && f.tip !== 'pdf');
+  const head = ['Uygunluk', ...fs.map(f => f.ad), 'Uygunsuzluk nedenleri', 'Yaklaşan süreler'];
+  const rows = list.map(p => { const d = pDegerlendir(p); return [d.uygun ? 'Uygun' : 'Uygun Değil', ...fs.map(f => f.tip === 'tarih' ? (parseD(p[f.key]) || '') : (p[f.key] ?? '')), d.sorun.join('; '), d.yakin.join('; ')]; });
+  const aoa = xSafe([head, ...rows]); const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates:true, dateNF:'dd"."mm"."yyyy' });
+  ws['!cols'] = head.map(h => ({ wch: Math.min(40, Math.max(12, h.length + 2)) })); ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{ r:0, c:0 }, e:{ r:aoa.length - 1, c:head.length - 1 } }) };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Personel Bilgi');
+  if (await saveFile(`SiteEye_Personel_${ymd(new Date()).replace(/-/g, '')}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType:'xlsx', type:'array' })))) toast(`${list.length} personel indirildi`); });
+
+/* Aktivite formundaki Personel alanı: personel listesinden isimle aranıp seçilir; uygun olmayan kişi için uyarı gösterilir */
+function personelDatalist(){ let dl = $('#personel-dl'); if (!dl) { dl = document.createElement('datalist'); dl.id = 'personel-dl'; document.body.appendChild(dl); }
+  const sig = S.personel.length + '|' + (S.personel[0]?.id || ''); if (dl._sig !== sig) { dl.innerHTML = S.personel.map(p => `<option value="${esc(p.adSoyad)}">${esc([p.gorev, p.lokasyon].filter(Boolean).join(' · '))}</option>`).join(''); dl._sig = sig; } }
+document.addEventListener('input', e => { if (e.target.id !== 'a-personel') return; personelUyari(e.target); });
+document.addEventListener('change', e => { if (e.target.id !== 'a-personel') return; personelUyari(e.target); });
+function personelUyari(el){ const w = el.closest('.fld'); if (!w) return; let h = w.querySelector('.p-uyari'); if (!h) { h = document.createElement('span'); h.className = 'hint p-uyari'; w.appendChild(h); }
+  const p = S.personel.find(x => tru(x.adSoyad) === tru(el.value)); if (!p) { h.textContent = ''; return; }
+  const d = pDegerlendir(p); h.innerHTML = d.uygun ? `<span style="color:var(--ok, #2e7d32)">✓ Uygun</span>${d.yakin.length ? ' · ' + esc(d.yakin[0]) : ''}` : `<span style="color:var(--crit)">⚠ Uygun değil:</span> ${esc(d.sorun.slice(0, 2).join('; '))}${d.sorun.length > 2 ? ' …' : ''}`; }
+
+/* ---------- Ayarlar: personel uygunluk kuralları ---------- */
+async function saveKurallar(arr, extra = {}){ await S.db.doc('ayarlar/personelKurallari').set({ kurallar:arr, uyariGun:uyariGun(), ...extra, guncelleme:new Date().toISOString(), guncelleyen:AUTH.me?.email || '' }); }
+function rKurallar(){
+  const T = $('#kr-table'); if (!T) return; const ks = kurallar();
+  const ozet = k => k.tur === 'gecerli' ? `${esc(pAd(k.alan))} + ${k.sureGun} gün` : k.tur === 'deger' ? `${esc(pAd(k.alan))} ∈ ${esc((k.degerler || []).join(' / '))}` : `${esc(pAd(k.alan))} dolu`;
+  const sayi = k => S.personel.filter(p => { if (k.kosulAlan && tru(p[k.kosulAlan]) !== tru(k.kosulDeger)) return false; const save = S.kurallar; S.kurallar = { kurallar:[k], uyariGun:0 }; const r = !pDegerlendir(p).uygun; S.kurallar = save; return r; }).length;
+  T.innerHTML = `<thead><tr><th>Kural</th><th>Kontrol</th><th>Koşul</th><th class="n">Uymayan</th><th>Durum</th><th></th></tr></thead><tbody>` + ks.map((k, i) => `<tr><td><b>${esc(k.ad)}</b></td><td>${ozet(k)}</td><td>${k.kosulAlan ? `${esc(pAd(k.kosulAlan))} = ${esc(k.kosulDeger)}` : '—'}</td><td class="n">${k.aktif === false ? '—' : sayi(k)}</td><td><span class="pill ${k.aktif === false ? '' : 'ok'}">${k.aktif === false ? 'Kapalı' : 'Açık'}</span></td>
+    <td style="white-space:nowrap"><button class="btn sm" data-kedit="${i}">Düzenle</button> <button class="btn sm" data-ktog="${i}">${k.aktif === false ? 'Aç' : 'Kapat'}</button> <button class="btn sm danger" data-kdel="${i}">Sil</button></td></tr>`).join('') + '</tbody>';
+  if (document.activeElement?.id !== 'kr-uyari') $('#kr-uyari').value = uyariGun();
+}
+document.addEventListener('click', async e => { if (!S.isAdmin) return; const b = e.target.closest('[data-kedit],[data-ktog],[data-kdel],#kr-add,#kr-sablon'); if (!b) return;
+  if (b.id === 'kr-add') return openKuralEditor(null);
+  if (b.id === 'kr-sablon') return krSablon();
+  if (b.dataset.kedit != null) return openKuralEditor(+b.dataset.kedit);
+  const arr = kurallar().map(x => ({ ...x }));
+  try {
+    if (b.dataset.ktog != null) { const k = arr[+b.dataset.ktog]; k.aktif = k.aktif === false; await saveKurallar(arr); toast(k.aktif ? 'Kural açıldı' : 'Kural kapatıldı'); }
+    if (b.dataset.kdel != null) { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Emin misiniz?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Sil'; }, 3500); return; } arr.splice(+b.dataset.kdel, 1); await saveKurallar(arr); toast('Kural silindi'); }
+  } catch (err) { toast(adminErr(err)); } });
+$('#kr-uyari').addEventListener('change', async e => { if (!S.isAdmin) return; const n = Math.max(0, Math.min(365, Math.round(Number(e.target.value) || 0))); try { await saveKurallar(kurallar(), { uyariGun:n }); toast(`Uyarı süresi ${n} gün`); } catch (err) { toast(adminErr(err)); } });
+function openKuralEditor(i){
+  const isNew = i == null, k = isNew ? { id:'k' + Date.now().toString(36), ad:'', tur:'gecerli', alan:'', sureGun:365, kosulAlan:'', kosulDeger:'', degerler:[], aktif:true } : { ...kurallar()[i] };
+  const fs = FF('personel').filter(f => f.tip !== 'foto' && f.tip !== 'pdf'), tarihler = fs.filter(f => f.tip === 'tarih'), listeler = fs.filter(f => f.tip === 'liste');
+  const o = sheet(`<header><h2>${isNew ? 'Yeni kural' : 'Kuralı düzenle'}</h2><button class="btn sm" data-close>Kapat</button></header>
+  <form class="f one" id="f-kr" novalidate>
+    <div class="fld"><label for="kr-ad">Kural adı</label><input id="kr-ad" value="${esc(k.ad)}" placeholder="ör. Sağlık raporu geçerli olmalı"></div>
+    <div class="fld"><label for="kr-tur">Kontrol türü</label><select id="kr-tur">${Object.entries(KURAL_TUR).map(([v, l]) => `<option value="${v}"${v === k.tur ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="fld"><label for="kr-alan">Kontrol edilen alan</label><select id="kr-alan"></select></div>
+    <div class="fld" id="kr-sure-w"><label for="kr-sure">Geçerlilik süresi (gün)</label><input id="kr-sure" type="number" min="1" max="3650" value="${esc(k.sureGun || 365)}"><span class="hint">1 yıl = 365, 2 yıl = 730, 3 yıl = 1095. Tarih + süre bugünden önceyse personel uygun değil sayılır.</span></div>
+    <div class="fld" id="kr-deg-w"><label for="kr-deg">İzin verilen değerler · her satıra bir değer</label><textarea id="kr-deg" rows="4">${esc((k.degerler || []).join('\n'))}</textarea></div>
+    <div class="fld"><label for="kr-kalan">Yalnızca şu durumda uygula (isteğe bağlı)</label><select id="kr-kalan"><option value="">Her personele uygula</option>${listeler.map(f => `<option value="${esc(f.key)}"${f.key === k.kosulAlan ? ' selected' : ''}>${esc(f.ad)}</option>`).join('')}</select></div>
+    <div class="fld" id="kr-kdeg-w"><label for="kr-kdeg">… şu değerdeyse</label><select id="kr-kdeg"></select></div>
+    <div class="actions"><button class="btn primary" type="submit">Kaydet</button><span class="err" id="kr-msg"></span></div>
+  </form>`);
+  const f = o.querySelector('#f-kr'), q = s => f.querySelector(s);
+  const upd = () => { const t = q('#kr-tur').value, cur = q('#kr-alan').value || k.alan; const pool = t === 'gecerli' ? tarihler : t === 'deger' ? listeler.concat(fs.filter(x => x.tip === 'metin')) : fs;
+    q('#kr-alan').innerHTML = pool.map(x => `<option value="${esc(x.key)}"${x.key === cur ? ' selected' : ''}>${esc(x.ad)}</option>`).join('');
+    q('#kr-sure-w').hidden = t !== 'gecerli'; q('#kr-deg-w').hidden = t !== 'deger';
+    const ka = fs.find(x => x.key === q('#kr-kalan').value); q('#kr-kdeg-w').hidden = !ka; const kd = q('#kr-kdeg').value || k.kosulDeger;
+    q('#kr-kdeg').innerHTML = ka ? optsOf(ka).map(v => `<option${tru(v) === tru(kd) ? ' selected' : ''}>${esc(v)}</option>`).join('') : ''; };
+  q('#kr-tur').addEventListener('change', upd); q('#kr-kalan').addEventListener('change', upd); upd();
+  f.addEventListener('submit', async e => { e.preventDefault(); const m = q('#kr-msg');
+    const nk = { ...k, ad:q('#kr-ad').value.trim(), tur:q('#kr-tur').value, alan:q('#kr-alan').value, sureGun:Math.max(1, Math.min(3650, Math.round(Number(q('#kr-sure').value) || 365))), kosulAlan:q('#kr-kalan').value, kosulDeger:q('#kr-kalan').value ? q('#kr-kdeg').value : '', degerler:uniq(q('#kr-deg').value.split('\n').map(x => x.trim())) };
+    if (!nk.ad) return m.textContent = 'Kural adı girin.'; if (!nk.alan) return m.textContent = 'Alan seçin.'; if (nk.tur === 'deger' && !nk.degerler.length) return m.textContent = 'En az bir izinli değer girin.';
+    const arr = kurallar().map(x => ({ ...x })); if (isNew) arr.push(nk); else arr[i] = nk;
+    try { await saveKurallar(arr); o.remove(); toast(isNew ? 'Kural eklendi' : 'Kural güncellendi'); } catch (err) { m.textContent = adminErr(err); } });
+}
+/* Kuralları Excel ile toplu tanımlama */
+const KR_HEAD = ['Kural adı', 'Kontrol türü (gecerli / dolu / deger)', 'Alan', 'Süre (gün)', 'İzinli değerler (; ile ayırın)', 'Koşul alanı', 'Koşul değeri', 'Açık (Evet / Hayır)'];
+async function krSablon(){ if (!window.XLSX) return toast('Excel kütüphanesi yüklenemedi');
+  const aoa = [KR_HEAD, ...kurallar().map(k => [k.ad, k.tur, pAd(k.alan), k.tur === 'gecerli' ? k.sureGun : '', (k.degerler || []).join('; '), k.kosulAlan ? pAd(k.kosulAlan) : '', k.kosulDeger || '', k.aktif === false ? 'Hayır' : 'Evet'])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [50, 22, 36, 10, 26, 26, 14, 12].map(w => ({ wch:w }));
+  const al = XLSX.utils.aoa_to_sheet([['Alan adları (Alan ve Koşul alanı sütunlarına bunlardan birini yazın)'], ...FF('personel').filter(f => f.tip !== 'foto' && f.tip !== 'pdf').map(f => [f.ad, TIP[f.tip]])]); al['!cols'] = [{ wch:50 }, { wch:14 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'KURALLAR'); XLSX.utils.book_append_sheet(wb, al, 'ALANLAR');
+  await saveFile('SiteEye_Personel_Kurallari.xlsx', new Uint8Array(XLSX.write(wb, { bookType:'xlsx', type:'array' }))); }
+$('#kr-file').addEventListener('change', async e => { const file = e.target.files[0], m = $('#kr-msg2'); if (!file || !S.isAdmin) return; e.target.value = '';
+  try { const wb = XLSX.read(await file.arrayBuffer(), { type:'array' }); const ws = wb.Sheets['KURALLAR'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' }).slice(1).filter(r => String(r[0] || '').trim());
+    const fs = FF('personel'), keyOf = v => { const t = hdrKey(v); return (fs.find(f => hdrKey(f.ad) === t || f.key === String(v).trim()) || {}).key || ''; };
+    const yeni = [], hata = [];
+    rows.forEach((r, i) => { const tur = String(r[1] || '').trim().toLowerCase().replace('geçerli', 'gecerli').replace('değer', 'deger'); const alan = keyOf(r[2]);
+      if (!Object.hasOwn(KURAL_TUR, tur)) return hata.push(`Satır ${i + 2}: kontrol türü "${r[1]}" anlaşılamadı`); if (!alan) return hata.push(`Satır ${i + 2}: alan "${r[2]}" bulunamadı`);
+      const kosulAlan = String(r[5] || '').trim() ? keyOf(r[5]) : ''; if (String(r[5] || '').trim() && !kosulAlan) return hata.push(`Satır ${i + 2}: koşul alanı "${r[5]}" bulunamadı`);
+      yeni.push({ id:'k' + fnv(String(r[0])), ad:String(r[0]).trim().slice(0, 200), tur, alan, sureGun:Math.max(1, Math.round(Number(r[3]) || 365)), degerler:String(r[4] || '').split(/[;\n]/).map(x => x.trim()).filter(Boolean), kosulAlan, kosulDeger:String(r[6] || '').trim(), aktif:tru(r[7]) !== 'HAYIR' }); });
+    if (!yeni.length) return m.textContent = 'Geçerli kural bulunamadı. ' + hata.slice(0, 3).join(' · ');
+    await saveKurallar(yeni); m.textContent = `${yeni.length} kural yüklendi (önceki kuralların yerine geçti).${hata.length ? ' Atlanan: ' + hata.slice(0, 3).join(' · ') : ''}`;
+  } catch (err) { m.textContent = 'Dosya okunamadı: ' + err.message; } });
+
 /* ---------- KAZA ---------- */
 function rKaza(){
   $('#kaza-new').disabled = $('#rk-new').disabled = !S.db || !S.canWrite;
@@ -1212,13 +1443,18 @@ const TOPLU = {
 /* DÖF ve Ceza toplu giriş/indirme sütunları, Ayarlar'daki form tanımından üretilir */
 const ACIK_LISTE = new Set(['firma','altYuklenici','uygunsuzlukTuru','cezaKesilen','yansitma']);
 function genCols(fm){ const fs = FF(fm).filter(f => f.aktif !== false && f.tip !== 'foto' && f.tip !== 'pdf');
-  return [['Tarih', 'tarih', { t:'tarih' }, 1], ...fs.map(f => { let sp;
+  return [...(fm === 'personel' ? [] : [['Tarih', 'tarih', { t:'tarih' }, 1]]), ...fs.map(f => { let sp;
     if (f.kaynak === 'kullanicilar') sp = { t:'kisi' }; else if (f.kaynak === 'lokasyonlar') sp = { t:'lok' };
     else if (f.key === 'olasilik' || f.key === 'siddet') sp = { t:'puan' };
-    else if (f.tip === 'liste') sp = TP_LIST(optsOf(f), !ACIK_LISTE.has(f.key));
+    else if (f.tip === 'liste') sp = TP_LIST(optsOf(f), fm === 'personel' ? optsOf(f).join('|') === 'Evet|Hayır' : !ACIK_LISTE.has(f.key));
     else if (f.tip === 'tarih') sp = { t:'tarih' }; else if (f.tip === 'sayi') sp = (f.key === 'tutar' || f.key === 'yansitmaTutar') ? { t:'para' } : { t:'sayi' };
     else sp = { t:'metin' };
-    return [f.ad.replace(/[–]/g, '-'), f.key, sp, f.zorunlu ? 1 : 0]; })]; }
+    return [f.ad.replace(/[–]/g, '-'), f.key, sp, f.zorunlu ? 1 : 0, Array.isArray(f.excel) ? f.excel : []]; })]; }
+TOPLU.personel = { ad:'Personel', col:'personel', on:'p-', sayfa:'PERSONEL BİLGİ', guncelle:true,
+  cols: () => genCols('personel'),
+  fix(r){ r.adSoyad = nameCase(r.adSoyad); if (!r.adSoyad) return 'Adı Soyadı boş'; },
+  key: r => tru(r.adSoyad),
+  mevcut: () => S.personel.map(x => x.id) };
 const hdrKey = v => tru(String(v ?? '').replace(/\*/g, '')).replace(/[^A-ZÇĞİÖŞÜ0-9]/g, '');
 function tpDate(v){
   if (v instanceof Date && !isNaN(v)) return ymd(v);
@@ -1244,8 +1480,8 @@ function tpCell(spec, v){
 }
 function tpParse(tur, rows){
   const T = TOPLU[tur], cols = T.cols(); if (!rows.length) throw new Error('Dosyada satır yok.');
-  let hi = rows.findIndex(r => (r || []).some(c => cols.some(([h]) => hdrKey(c) === hdrKey(h)))); if (hi < 0) throw new Error('Başlık satırı bulunamadı. Lütfen indirdiğiniz şablonu kullanın.');
-  const head = rows[hi].map(hdrKey), idx = cols.map(([h]) => head.indexOf(hdrKey(h)));
+  let hi = rows.findIndex(r => (r || []).some(c => cols.some(([h, , , , al]) => [h, ...(al || [])].some(x => hdrKey(c) === hdrKey(x))))); if (hi < 0) throw new Error('Başlık satırı bulunamadı. Lütfen indirdiğiniz şablonu kullanın.');
+  const head = rows[hi].map(hdrKey), idx = cols.map(([h, , , , al]) => { let i = head.indexOf(hdrKey(h)); (al || []).forEach(a => { if (i < 0) i = head.indexOf(hdrKey(a)); }); return i; });
   const eksik = cols.filter(([, , , req], i) => req && idx[i] < 0).map(([h]) => h); if (eksik.length) throw new Error('Şablonda zorunlu sütun eksik: ' + eksik.join(', '));
   const ctx = { no:{} }, out = [], seen = {}, var_ = new Set(T.mevcut());
   rows.slice(hi + 1).forEach((row, i) => {
@@ -1258,7 +1494,7 @@ function tpParse(tur, rows){
     if (errs.length) return out.push({ line, err:errs.join(' · ') });
     const canon = T.key(r); const n = seen[canon] || 0; seen[canon] = n + 1;
     const id = T.on + fnv(canon) + (n ? '-' + n : '');
-    out.push({ line, id, rec:{ ...r, yil:+r.tarih.slice(0, 4), hafta:isoWeek(parseD(r.tarih)).w }, var:var_.has(id) });
+    out.push({ line, id, rec: r.tarih ? { ...r, yil:+r.tarih.slice(0, 4), hafta:isoWeek(parseD(r.tarih)).w } : { ...r }, var:var_.has(id) });
   });
   return out;
 }
@@ -1294,17 +1530,17 @@ function openToplu(tur){
       const name = wb.SheetNames.find(n => tru(n) === T.sayfa) || wb.SheetNames[0];
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, raw:true, defval:'' }).slice(0, 3001);
       R = tpParse(tur, rows);
-      const ok = R.filter(x => x.rec && !x.var), dup = R.filter(x => x.var), bad = R.filter(x => x.err);
-      m.textContent = `${R.length} satır okundu: ${ok.length} kayıt eklenecek` + (dup.length ? `, ${dup.length} satır daha önce yüklenmiş (atlanacak)` : '') + (bad.length ? `, ${bad.length} satır hatalı (atlanacak)` : '') + '.';
+      const ok = R.filter(x => x.rec && (!x.var || T.guncelle)), dup = R.filter(x => x.var), bad = R.filter(x => x.err);
+      m.textContent = `${R.length} satır okundu: ${ok.length - (T.guncelle ? dup.length : 0)} kayıt eklenecek` + (dup.length ? (T.guncelle ? `, ${dup.length} kayıt güncellenecek` : `, ${dup.length} satır daha önce yüklenmiş (atlanacak)`) : '') + (bad.length ? `, ${bad.length} satır hatalı (atlanacak)` : '') + '.';
       const cols = T.cols().slice(0, 6);
-      q('#tp-prev').innerHTML = R.length ? `<div class="tablewrap lim"><table><thead><tr><th class="n">Satır</th><th>Durum</th>${cols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${R.slice(0, 300).map(x => `<tr><td class="n">${x.line}</td><td>${x.err ? `<span class="pill crit" title="${esc(x.err)}">Hatalı</span> <span class="muted" style="font-size:.8rem">${esc(x.err)}</span>` : x.var ? '<span class="pill">Zaten var</span>' : '<span class="pill ok">Eklenecek</span>'}</td>${cols.map(([, k]) => `<td><div class="clamp">${esc(x.rec ? (k === 'tarih' ? trD(x.rec[k]) : x.rec[k] ?? '') : '')}</div></td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
+      q('#tp-prev').innerHTML = R.length ? `<div class="tablewrap lim"><table><thead><tr><th class="n">Satır</th><th>Durum</th>${cols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${R.slice(0, 300).map(x => `<tr><td class="n">${x.line}</td><td>${x.err ? `<span class="pill crit" title="${esc(x.err)}">Hatalı</span> <span class="muted" style="font-size:.8rem">${esc(x.err)}</span>` : x.var ? (T.guncelle ? '<span class="pill info">Güncellenecek</span>' : '<span class="pill">Zaten var</span>') : '<span class="pill ok">Eklenecek</span>'}</td>${cols.map(([, k]) => `<td><div class="clamp">${esc(x.rec ? (k === 'tarih' ? trD(x.rec[k]) : x.rec[k] ?? '') : '')}</div></td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
       q('#tp-go').disabled = !ok.length || !S.db;
     } catch (err) { m.textContent = 'Dosya okunamadı: ' + err.message; }
   });
   q('#tp-go').addEventListener('click', async () => { const btn = q('#tp-go'), m = q('#tp-msg'), prog = q('#tp-prog'); btn.disabled = true; prog.hidden = false;
-    const jobs = R.filter(x => x.rec && !x.var), now = new Date().toISOString(); let done = 0, fail = 0, i = 0, lastErr = '';
+    const jobs = R.filter(x => x.rec && (!x.var || T.guncelle)), now = new Date().toISOString(); let done = 0, fail = 0, i = 0, lastErr = '';
     const worker = async () => { while (i < jobs.length) { const x = jobs[i++];
-      try { await S.db.doc(T.col + '/' + x.id).set({ ...x.rec, foto:[], ...(tur === 'dof' ? { kanitFoto:[] } : {}), olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:now, guncelleyen:S.meId, guncelleme:now, kaynak:'excel-toplu' }); x.var = true; }
+      try { if (x.var && T.guncelle) { await S.db.doc(T.col + '/' + x.id).update({ ...x.rec, guncelleyen:S.meId, guncelleme:now }); } else await S.db.doc(T.col + '/' + x.id).set({ ...x.rec, ...(tur === 'personel' ? {} : { foto:[] }), ...(tur === 'dof' ? { kanitFoto:[] } : {}), olusturan:S.meId, olusturanEmail:AUTH.me?.email || '', olusturma:now, guncelleyen:S.meId, guncelleme:now, kaynak:'excel-toplu' }); x.var = true; }
       catch (e) { fail++; lastErr = e.message; } done++; prog.firstElementChild.style.width = (done / jobs.length * 100) + '%'; } };
     await Promise.all([worker(), worker(), worker()]);
     m.textContent = `Bitti: ${done - fail} kayıt eklendi${fail ? `, ${fail} kayıt eklenemedi (${lastErr})` : ''}.`; if (!fail) toast(`${done} ${T.ad} kaydı eklendi`);
@@ -1616,7 +1852,7 @@ async function saveCfg(patch){
   catch { const { aktiviteler, lokasyonlar, ...rest } = S.cfg; await ref.set({ ...rest, ...patch }); }
 }
 function rAyar(){
-  rFields('aktivite'); rFields('dof'); rFields('ceza');
+  rFields('aktivite'); rFields('dof'); rFields('ceza'); rFields('personel'); rKurallar();
   const sel = $('#ot-sure'); if (document.activeElement !== sel) sel.innerHTML = OTURUM_SECENEK.map(([h, l]) => `<option value="${h}"${h === (S.oturumSaat || 8) ? ' selected' : ''}>${l}</option>`).join('');
 }
 $('#mail-test').addEventListener('click', async () => { if (!S.isAdmin) return; const m = $('#mail-msg'); try { await FB.auth.resetMail(AUTH.me.email); m.textContent = `${AUTH.me.email} adresine şifre yenileme e-postası gönderildi. Gelen e-postanın gönderen adresini kontrol edin; şifrenizi değiştirmek zorunda değilsiniz.`; } catch (err) { m.textContent = 'Gönderilemedi: ' + err.message; } });
@@ -1767,7 +2003,9 @@ function subscribe(){
   const db = S.db, err = e => { if (e?.code === 'permission-denied' && AUTH.me) banner('Kayıtlara erişim izniniz yok veya oturumunuz değişti. Çıkış yapıp yeniden girin.', true); };
   S.unsub.push(db.doc('ayarlar/listeler').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.cfg = { ...DEF, ...(d || {}) }; if (!Array.isArray(S.cfg.firmalar) || !S.cfg.firmalar.length) S.cfg.firmalar = DEF.firmalar; applyFields(); render(); }, err));
   S.unsub.push(db.doc('ayarlar/oturum').onSnapshot(snap => { const h = Number(snap.exists ? snap.data()?.sureSaat : 0); S.oturumSaat = OTURUM_SECENEK.some(x => x[0] === h) ? h : 8; if (S.tab === 'ayar') render(); }, err));
-  ['dof','ceza'].forEach(fm => S.unsub.push(db.doc(FORMLAR[fm].doc).onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.forms[fm] = Array.isArray(d?.alanlar) && d.alanlar.length ? d.alanlar : null; render(); }, err)));
+  S.unsub.push(db.collection('personel').onSnapshot(snap => { S._pRaw = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._pc = null; personelDatalist(); render(); }, err));
+  S.unsub.push(db.doc('ayarlar/personelKurallari').onSnapshot(snap => { S.kurallar = snap.exists ? snap.data() : null; render(); }, err));
+  ['dof','ceza','personel'].forEach(fm => S.unsub.push(db.doc(FORMLAR[fm].doc).onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.forms[fm] = Array.isArray(d?.alanlar) && d.alanlar.length ? d.alanlar : null; render(); }, err)));
   S.unsub.push(db.doc('ayarlar/aktiviteFormu').onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.fields = Array.isArray(d?.alanlar) && d.alanlar.length ? d.alanlar : null; applyFields(); render(); }, err));
   for (const yy of [S.yil - 1, S.yil]) for (let m = 1; m <= 12; m++) S.unsub.push(db.collection('aktiviteler').where('donem', '==', `${yy}-${pad(m)}`).onSnapshot(snap => { S.months[`${yy}-${m}`] = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._ac = null; rStatus(); render(); }, err));
   S.unsub.push(db.collection('dof').onSnapshot(snap => { S._dofsRaw = snap.docs.map(d => ({ id:d.id, ...d.data() })); S._dc = null; render(); }, err));
@@ -1786,7 +2024,7 @@ document.addEventListener('click', async e => { const a = e.target.closest('[dat
   o.querySelector('#kil-pdf').addEventListener('click', () => { const u = URL.createObjectURL(kilavuzPdf()); const w = window.open(u, '_blank', 'noopener'); if (!w) saveFile('SiteEye_Kullanim_Kilavuzu.pdf', kilavuzPdf()); setTimeout(() => URL.revokeObjectURL(u), 120000); });
   o.querySelector('#kil-indir').addEventListener('click', () => saveFile('SiteEye_Kullanim_Kilavuzu.pdf', kilavuzPdf())); });
 /* ---------- yedek al / yedekten yükle (admin) ---------- */
-const YEDEK_KOL = ['aktiviteler','dof','kazalar','cezalar','ayarlar'];
+const YEDEK_KOL = ['aktiviteler','dof','kazalar','cezalar','personel','ayarlar'];
 const YEDEK_ID = /^[A-Za-z0-9_\-]{1,120}$/;
 const YEDEK_TIP = new Set(['image/jpeg','image/png','image/webp','application/pdf']);
 function yedekTemizle(v, d = 0){
@@ -1817,7 +2055,7 @@ $('#yd-file').addEventListener('change', async e => {
     const K = j && typeof j.koleksiyonlar === 'object' ? j.koleksiyonlar : null; if (!K) throw new Error('Bu dosya bir SiteEye yedeği değil.');
     const jobs = [];
     for (const c of YEDEK_KOL) { const docs = K[c]; if (!docs || typeof docs !== 'object') continue;
-      for (const [id, d] of Object.entries(docs)) { if (!YEDEK_ID.test(id) || !d || typeof d !== 'object' || Array.isArray(d)) continue; if (c === 'ayarlar' && !['listeler','aktiviteFormu'].includes(id)) continue; jobs.push([c + '/' + id, yedekTemizle(d)]); } }
+      for (const [id, d] of Object.entries(docs)) { if (!YEDEK_ID.test(id) || !d || typeof d !== 'object' || Array.isArray(d)) continue; if (c === 'ayarlar' && !['listeler','aktiviteFormu','dofFormu','cezaFormu','personelFormu','personelKurallari','oturum'].includes(id)) continue; jobs.push([c + '/' + id, yedekTemizle(d)]); } }
     const files = Object.entries(j.dosyalar && typeof j.dosyalar === 'object' ? j.dosyalar : {}).filter(([id, f]) => bid(id) && f && YEDEK_TIP.has(f.tip) && typeof f.b64 === 'string');
     YD = { jobs, files };
     const say = c => jobs.filter(x => x[0].startsWith(c + '/')).length;
