@@ -388,7 +388,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
   <section class="view" id="v-dof" hidden>
     <div class="bar">
       <h2 class="grow">DÖF/CPA</h2>
-      <button class="btn primary" id="dof-new">+ Yeni DÖF</button><button class="btn" data-toplu="dof">Excel ile toplu giriş</button>
+      <button class="btn primary" id="dof-new">+ Yeni DÖF</button><button class="btn" data-toplu="dof">Excel ile toplu giriş</button><button class="btn" data-xlindir="dof">Excel indir</button>
     </div>
     <div class="bar">
       <select id="dof-durum" class="btn sm" aria-label="Durum"><option value="acik">Açık olanlar</option><option value="">Tüm durumlar</option><option>Tamamlandı</option><option>İptal</option></select>
@@ -401,7 +401,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
 
   <!-- KAZA -->
   <section class="view" id="v-kaza" hidden>
-    <div class="bar"><h2 class="grow">Kaza Rapor</h2><button class="btn primary" id="kaza-new" data-tip="Kaza">+ Kaza bildir</button><button class="btn" id="rk-new" data-tip="Ramak Kala">+ Ramak kala bildir</button><button class="btn" data-toplu="kaza">Excel ile toplu giriş</button></div>
+    <div class="bar"><h2 class="grow">Kaza Rapor</h2><button class="btn primary" id="kaza-new" data-tip="Kaza">+ Kaza bildir</button><button class="btn" id="rk-new" data-tip="Ramak Kala">+ Ramak kala bildir</button><button class="btn" data-toplu="kaza">Excel ile toplu giriş</button><button class="btn" data-xlindir="kaza">Excel indir</button></div>
     <div class="kpis" id="kaza-kpis"></div>
     <div class="bar"><div class="seg" role="tablist" aria-label="Olay tipi"><button type="button" data-kfilt="">Tümü</button><button type="button" data-kfilt="Kaza">Kaza</button><button type="button" data-kfilt="Ramak Kala">Ramak kala</button></div></div>
     <div class="tablewrap lim"><table id="kaza-table"></table></div>
@@ -409,7 +409,7 @@ th[aria-sort="ascending"] .arr,th[aria-sort="descending"] .arr{opacity:1;color:v
 
   <!-- CEZA & ÖDÜL -->
   <section class="view" id="v-ceza" hidden>
-    <div class="bar"><h2 class="grow">Ceza</h2><button class="btn primary" data-czyeni="Ceza">+ Ceza</button><button class="btn" data-toplu="ceza">Excel ile toplu giriş</button></div>
+    <div class="bar"><h2 class="grow">Ceza</h2><button class="btn primary" data-czyeni="Ceza">+ Ceza</button><button class="btn" data-toplu="ceza">Excel ile toplu giriş</button><button class="btn" data-xlindir="ceza">Excel indir</button></div>
     <div class="kpis" id="cz-kpis"></div>
     <div class="tablewrap lim"><table id="cz-table"></table></div>
   </section>
@@ -882,12 +882,14 @@ function openCeza(id, tip){
 }
 document.addEventListener('click', async e => { const a = e.target.closest('[data-czpdf]'); if (!a) return; e.preventDefault(); const id = bid(a.dataset.czpdf); if (!id) return; try { const b = await fileBlob(id); await saveFile(a.dataset.czpdfad || 'belge.pdf', b); } catch { toast('Belge indirilemedi'); } });
 
+function dofFiltre(){ const lk = $('#dof-lok').value, dal = $('#dof-alt').value, du = $('#dof-durum').value, q = tru($('#dof-q').value);
+  return S.dofs.filter(d => (du === 'acik' ? d.durum === 'Devam Ediyor' : !du || d.durum === du) && (!lk || d.lokasyon === lk) && (!dal || d.altYuklenici === dal) && (!q || tru([d.gozlem,d.formNo,d.sorumlu,d.aksiyon].join(' ')).includes(q))); }
 function rDof(){
   const lk = $('#dof-lok').value; $('#dof-lok').innerHTML = opts(S.cfg.lokasyonlar, lk, 'Tüm lokasyonlar');
   const dal = $('#dof-alt').value; $('#dof-alt').innerHTML = opts(uniq([...S.cfg.altyukleniciler, ...S.dofs.map(d => d.altYuklenici)]), dal, 'Tüm alt yükleniciler');
   $('#dof-new').disabled = !S.db || !S.canWrite;
   const du = $('#dof-durum').value, q = tru($('#dof-q').value);
-  let list = S.dofs.filter(d => (du === 'acik' ? d.durum === 'Devam Ediyor' : !du || d.durum === du) && (!lk || d.lokasyon === lk) && (!dal || d.altYuklenici === dal) && (!q || tru([d.gozlem,d.formNo,d.sorumlu,d.aksiyon].join(' ')).includes(q)));
+  let list = dofFiltre();
   const age = d => d.durum === 'Devam Ediyor' ? daysSince(d.tarih) : (d.kapanisTarih ? Math.round((parseD(d.kapanisTarih) - parseD(d.tarih)) / 864e5) : null);
   const SK = { risk:d => riskOf(d.olasilik, d.siddet).p, formNo:d => d.formNo || '', tarih:d => d.tarih || '', lokasyon:d => d.lokasyon || '', altYuklenici:d => d.altYuklenici || '', gozlem:d => d.gozlem || '', sorumlu:d => d.sorumlu || '', bekleme:d => age(d) ?? -1, durum:d => d.durum || '', foto:d => (d.foto||[]).length + (d.kanitFoto||[]).length };
   const srt = S.dofSort || (du === 'acik' ? { key:'risk', dir:-1 } : { key:'tarih', dir:-1 });
@@ -1213,6 +1215,22 @@ function openToplu(tur){
     m.textContent = `Bitti: ${done - fail} kayıt eklendi${fail ? `, ${fail} kayıt eklenemedi (${lastErr})` : ''}.`; if (!fail) toast(`${done} ${T.ad} kaydı eklendi`);
   });
 }
+/* Kaza / DÖF / Ceza listesini Excel'e indir: sütunlar toplu giriş şablonuyla aynı (+ ek bilgi sütunları) */
+document.addEventListener('click', async e => { const b = e.target.closest('[data-xlindir]'); if (!b) return; const tur = b.dataset.xlindir, T = TOPLU[tur]; if (!T) return;
+  if (!window.XLSX) return toast('Excel kütüphanesi yüklenemedi');
+  const list = (tur === 'dof' ? dofFiltre() : tur === 'kaza' ? S.kazalar.filter(k => !S.kfilt || k.olayTipi === S.kfilt) : S.cezalar).slice().sort((a, b) => (a.tarih || '').localeCompare(b.tarih || ''));
+  if (!list.length) return toast(tur === 'dof' ? 'Seçili filtrelere uyan DÖF yok (Durum filtresini kontrol edin)' : 'İndirilecek kayıt yok');
+  const cols = T.cols(), ek = tur === 'dof' ? ['Risk puanı', 'Risk', 'Kanıt fotoğrafı'] : [];
+  const head = [...cols.map(([h]) => h), ...ek, tur === 'ceza' ? 'Belge' : 'Fotoğraf', 'Giren', 'Kayıt zamanı'];
+  const rows = list.map(r => [...cols.map(([, k, spec]) => spec.t === 'tarih' ? (parseD(r[k]) || '') : (r[k] ?? '')),
+    ...(tur === 'dof' ? (() => { const rk = riskOf(r.olasilik, r.siddet); return [rk.p || '', rk.p ? rk.t : '', (r.kanitFoto || []).length]; })() : []),
+    (tur === 'ceza' ? (r.belge || []).length + (bid(r.belgePdfId) ? 1 : 0) : (r.foto || []).length), nameCase(hesapAd(r.olusturanEmail)) || r.olusturanEmail || '', r.olusturma ? fmtTs(r.olusturma) : '']);
+  const aoa = xSafe([head, ...rows]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates:true, dateNF:'dd"."mm"."yyyy' });
+  ws['!cols'] = head.map((h, i) => ({ wch: (cols[i] && cols[i][2].t === 'metin') ? 40 : Math.max(12, h.length + 2) }));
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{ r:0, c:0 }, e:{ r:aoa.length - 1, c:head.length - 1 } }) };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, T.sayfa);
+  if (await saveFile(`SiteEye_${T.sayfa}_${ymd(new Date()).replace(/-/g, '')}.xlsx`, new Uint8Array(XLSX.write(wb, { bookType:'xlsx', type:'array' })))) toast(`${list.length} kayıt indirildi`); });
 document.addEventListener('click', e => { const b = e.target.closest('[data-toplu]'); if (b && TOPLU[b.dataset.toplu]) openToplu(b.dataset.toplu); });
 
 /* ---------- KAYITLAR ---------- */
